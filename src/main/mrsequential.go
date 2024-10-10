@@ -34,7 +34,7 @@ func main() {
 	// read each input file,
 	// pass it to Map,
 	// accumulate the intermediate Map output.
-	//
+	//                  中间的
 	intermediate := []mr.KeyValue{}
 	for _, filename := range os.Args[2:] {
 		file, err := os.Open(filename)

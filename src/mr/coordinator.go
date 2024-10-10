@@ -8,7 +8,7 @@ import "net/http"
 
 type Coordinator struct {
 	// Your definitions here.
-
+	filenames []string
 }
 
 // Your code here -- RPC handlers for the worker to call.
@@ -38,7 +38,7 @@ func (c *Coordinator) server() {
 // main/mrcoordinator.go calls Done() periodically to find out
 // if the entire job has finished.
 func (c *Coordinator) Done() bool {
-	ret := true
+	ret := false
 
 	// Your code here.
 
