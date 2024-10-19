@@ -3,6 +3,7 @@ package mr
 import (
 	"log"
 	"sync"
+	"time"
 )
 import "net"
 import "os"
@@ -11,18 +12,32 @@ import "net/http"
 
 type Coordinator struct {
 	// Your definitions here.
-	filenames         []string
-	mapTaskId         int
-	nReduce           int
-	mapStatus         map[string]int   //map任务开始状态 0:未开始 1:已开始
-	reduceStatus      map[int]int      //reduce任务执行状态 0:空闲 1:正在运行
-	intermediateFiles map[int][]string //reduce任务编号对应中间文件
-	mu                sync.Mutex
+	files   []string
+	nReduce int
+
+	mapTasks    []MapReduceTask
+	reduceTasks []MapReduceTask
+
+	mapTasksDone    bool
+	reduceTasksDone bool
+	mu              sync.Mutex
+}
+type MapReduceTask struct {
+	taskId      int
+	taskType    string
+	status      int //0:未开始 1:正在进行 2:已完成
+	startTime   time.Time
+	mapFile     string
+	reduceFiles []string
 }
 
 // Your code here -- RPC handlers for the worker to call.
 func (c *Coordinator) Handle(args *Args, reply *Reply) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.mapTasksDone {
 
+	}
 }
 
 // an example RPC handler.
@@ -64,7 +79,19 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	c := Coordinator{}
 	// Your code here.
 	c.nReduce = nReduce
-	c.filenames = files
+	c.mapTaskId = 0
+	c.mapStatus = make(map[string]int)
+	for _, file := range files {
+		c.mapStatus[file] = 0
+	}
+	c.reduceStatus = make(map[int]int)
+	for i := 0; i < nReduce; i++ {
+		c.reduceStatus[i] = 0
+	}
+	c.intermediateFiles = make(map[int][]string)
+	c.mapTasksDone = false
+	c.reduceTasksDone = false
+
 	c.server()
 	return &c
 }

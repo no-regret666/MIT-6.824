@@ -37,36 +37,20 @@ func (a ByKey) Less(i, j int) bool { return a[i].Key < a[j].Key }
 func Worker(mapf func(string, string) []KeyValue,
 	reducef func(string, []string) string) {
 
-	// Your worker implementation here.
-	//单机运行，直接使用PID作为Worker ID，方便debug
-	id := os.Getpid()
-	log.Printf("Worker %d started", id)
-
-	lastTaskId := -1
-	lastTaskType := ""
 	for {
-		args := Args{
-			workerId:     id,
-			LastTaskId:   lastTaskId,
-			LastTaskType: lastTaskType,
-		}
+		args := Args{messageType: 1}
 		reply := Reply{}
 		call("Coordinator.Handle", &args, &reply)
-		switch reply.taskType {
+		task := reply.task
+		switch task.taskType {
 		case "":
-			log.Printf("所有任务完成!")
-			goto End
+			break
 		case "map":
-			doMapTask(reply.inputFile, reply.taskId, reply.nReduce, mapf)
+			doMapTask(task.mapFile, task.taskId, reply.nReduce, mapf)
 		case "reduce":
-			doReduceTask(reply.taskId, reply.nMap, reducef)
+			doReduceTask(task.taskId, reply.nMap, reducef)
 		}
-		lastTaskId = reply.taskId
-		lastTaskType = reply.taskType
-		log.Printf("Worker %d 完成任务 %d", id, reply.taskId)
 	}
-End:
-	log.Printf("Worker %d 结束工作!", id)
 
 	// uncomment to send the Example RPC to the coordinator.
 	// 取消注释以将Example RPC发给协调器

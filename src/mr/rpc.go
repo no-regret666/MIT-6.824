@@ -24,17 +24,14 @@ type ExampleReply struct {
 
 // Add your RPC definitions here.
 type Args struct {
-	workerId     int
-	LastTaskId   int
-	LastTaskType string
+	messageType int //1:请求新的任务 2:报告已完成任务
+	lastTask    MapReduceTask
 }
 
 type Reply struct {
-	taskId    int
-	taskType  string
-	inputFile string
-	nMap      int
-	nReduce   int
+	nMap    int
+	nReduce int
+	task    MapReduceTask
 }
 
 // Cook up a unique-ish UNIX-domain socket name
