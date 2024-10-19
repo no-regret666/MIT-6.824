@@ -1,9 +1,9 @@
 package mr
 
 import (
+	"fmt"
 	"log"
 	"sync"
-	"time"
 )
 import "net"
 import "os"
@@ -12,32 +12,38 @@ import "net/http"
 
 type Coordinator struct {
 	// Your definitions here.
-	files   []string
-	nReduce int
+	mapTaskNum      int //map任务总数
+	reduceTaskNum   int //reduce任务总数
+	mapTask         []Task
+	reduceTask      []Task
+	mapTasksDone    bool //map任务是否全部完成
+	reduceTasksDone bool //reduce任务是否全部完成
 
-	mapTasks    []MapReduceTask
-	reduceTasks []MapReduceTask
-
-	mapTasksDone    bool
-	reduceTasksDone bool
-	mu              sync.Mutex
+	mu sync.Mutex
 }
-type MapReduceTask struct {
-	taskId      int
-	taskType    string
-	status      int //0:未开始 1:正在进行 2:已完成
-	startTime   time.Time
-	mapFile     string
-	reduceFiles []string
+
+type Task struct {
+	taskType string
+	taskId   int
+	status   int //0:未开始 1:正在进行 2:已完成
+
+	//map
+	mapTask string
 }
 
 // Your code here -- RPC handlers for the worker to call.
-func (c *Coordinator) Handle(args *Args, reply *Reply) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if !c.mapTasksDone {
+func (c *Coordinator) taskNum(args *TaskNumArgs, reply *TaskNumReply) error {
+	reply.MapTaskNum = c.mapTaskNum
+	reply.ReduceTaskNum = c.reduceTaskNum
+	return nil
+}
 
-	}
+func (c *Coordinator) assignTask(args *TaskArgs, reply *Task) error {
+
+}
+
+func (c *Coordinator) taskDone(args *TaskDoneArgs, reply *TaskDoneReply) error {
+
 }
 
 // an example RPC handler.
@@ -78,20 +84,28 @@ func (c *Coordinator) Done() bool {
 func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	c := Coordinator{}
 	// Your code here.
-	c.nReduce = nReduce
-	c.mapTaskId = 0
-	c.mapStatus = make(map[string]int)
-	for _, file := range files {
-		c.mapStatus[file] = 0
+	c.mapTaskNum = len(files)
+	c.reduceTaskNum = nReduce
+	for i, file := range files {
+		c.mapTask = append(c.mapTask, Task{
+			taskType: "map",
+			taskId:   i,
+			status:   0,
+			mapTask:  file,
+		})
 	}
-	c.reduceStatus = make(map[int]int)
 	for i := 0; i < nReduce; i++ {
-		c.reduceStatus[i] = 0
+		c.reduceTask = append(c.reduceTask, Task{
+			taskType: "reduce",
+			status:   0,
+			taskId:   i,
+		})
 	}
-	c.intermediateFiles = make(map[int][]string)
 	c.mapTasksDone = false
 	c.reduceTasksDone = false
 
+	c.mu = sync.Mutex{}
+	fmt.Printf("Coodinator 初始化完毕!")
 	c.server()
 	return &c
 }

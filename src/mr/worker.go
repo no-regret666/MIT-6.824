@@ -37,18 +37,31 @@ func (a ByKey) Less(i, j int) bool { return a[i].Key < a[j].Key }
 func Worker(mapf func(string, string) []KeyValue,
 	reducef func(string, []string) string) {
 
+	taskNumArgs := TaskNumArgs{}
+	taskNumReply := TaskNumReply{}
+	call("Coordinator.taskNum", &taskNumArgs, &taskNumReply)
+	mapNum := taskNumReply.MapTaskNum
+	reduceNum := taskNumReply.ReduceTaskNum
+
 	for {
-		args := Args{messageType: 1}
-		reply := Reply{}
-		call("Coordinator.Handle", &args, &reply)
-		task := reply.task
+		taskArgs := TaskArgs{}
+		taskReply := TaskReply{}
+		call("Coordinator.assignTask", &taskArgs, &taskReply)
+		task := taskReply.task
 		switch task.taskType {
 		case "":
+			log.Printf("所有任务完成!")
 			break
 		case "map":
-			doMapTask(task.mapFile, task.taskId, reply.nReduce, mapf)
+			doMapTask(task.mapTask, task.taskId, reduceNum, mapf)
+			if task.taskId < mapNum {
+				taskDone("single", task)
+			} else {
+				taskDone("all", task)
+			}
 		case "reduce":
-			doReduceTask(task.taskId, reply.nMap, reducef)
+			doReduceTask(task.taskId, mapNum, reducef)
+			taskDone("", task)
 		}
 	}
 
@@ -56,6 +69,15 @@ func Worker(mapf func(string, string) []KeyValue,
 	// 取消注释以将Example RPC发给协调器
 	// CallExample()
 
+}
+
+func taskDone(msg string, task Task) bool {
+	taskDoneArgs := TaskDoneArgs{}
+	taskDoneArgs.msg = msg
+	taskDoneArgs.task = task
+	taskDoneReply := TaskDoneReply{}
+	call("Coordinator.taskDone", &taskDoneArgs, &taskDoneReply)
+	return taskDoneReply.isDone
 }
 
 func doMapTask(InputFile string, taskId int, nReduce int, mapf func(string, string) []KeyValue) {

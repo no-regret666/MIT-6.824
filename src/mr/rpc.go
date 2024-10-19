@@ -22,16 +22,27 @@ type ExampleReply struct {
 	Y int
 }
 
-// Add your RPC definitions here.
-type Args struct {
-	messageType int //1:请求新的任务 2:报告已完成任务
-	lastTask    MapReduceTask
+type TaskNumArgs struct{}
+
+type TaskNumReply struct {
+	MapTaskNum    int
+	ReduceTaskNum int
 }
 
-type Reply struct {
-	nMap    int
-	nReduce int
-	task    MapReduceTask
+// Add your RPC definitions here.
+type TaskArgs struct{}
+
+type TaskReply struct {
+	task Task
+}
+
+type TaskDoneArgs struct {
+	msg  string
+	task Task
+}
+
+type TaskDoneReply struct {
+	isDone bool
 }
 
 // Cook up a unique-ish UNIX-domain socket name
