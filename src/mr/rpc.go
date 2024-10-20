@@ -22,6 +22,7 @@ type ExampleReply struct {
 	Y int
 }
 
+// Add your RPC definitions here.
 type TaskNumArgs struct{}
 
 type TaskNumReply struct {
@@ -29,20 +30,19 @@ type TaskNumReply struct {
 	ReduceTaskNum int
 }
 
-// Add your RPC definitions here.
 type TaskArgs struct{}
 
 type TaskReply struct {
-	task Task
+	Task Task
 }
 
 type TaskDoneArgs struct {
-	msg  string
-	task Task
+	Msg  string
+	Task Task
 }
 
 type TaskDoneReply struct {
-	isDone bool
+	IsDone bool
 }
 
 // Cook up a unique-ish UNIX-domain socket name

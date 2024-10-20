@@ -39,29 +39,33 @@ func Worker(mapf func(string, string) []KeyValue,
 
 	taskNumArgs := TaskNumArgs{}
 	taskNumReply := TaskNumReply{}
-	call("Coordinator.taskNum", &taskNumArgs, &taskNumReply)
+	call("Coordinator.TaskNum", &taskNumArgs, &taskNumReply)
 	mapNum := taskNumReply.MapTaskNum
 	reduceNum := taskNumReply.ReduceTaskNum
 
 	for {
 		taskArgs := TaskArgs{}
 		taskReply := TaskReply{}
-		call("Coordinator.assignTask", &taskArgs, &taskReply)
-		task := taskReply.task
-		switch task.taskType {
+		call("Coordinator.AssignTask", &taskArgs, &taskReply)
+		task := taskReply.Task
+		switch task.TaskType {
 		case "":
-			log.Printf("所有任务完成!")
+			//log.Printf("所有任务完成!")
 			break
 		case "map":
-			doMapTask(task.mapTask, task.taskId, reduceNum, mapf)
-			if task.taskId < mapNum {
+			doMapTask(task.MapTask, task.TaskId, reduceNum, mapf)
+			if task.TaskId < mapNum {
 				taskDone("single", task)
 			} else {
 				taskDone("all", task)
 			}
 		case "reduce":
-			doReduceTask(task.taskId, mapNum, reducef)
-			taskDone("", task)
+			doReduceTask(task.TaskId, mapNum, reducef)
+			if task.TaskId < reduceNum {
+				taskDone("single", task)
+			} else {
+				taskDone("all", task)
+			}
 		}
 	}
 
@@ -73,11 +77,11 @@ func Worker(mapf func(string, string) []KeyValue,
 
 func taskDone(msg string, task Task) bool {
 	taskDoneArgs := TaskDoneArgs{}
-	taskDoneArgs.msg = msg
-	taskDoneArgs.task = task
+	taskDoneArgs.Msg = msg
+	taskDoneArgs.Task = task
 	taskDoneReply := TaskDoneReply{}
-	call("Coordinator.taskDone", &taskDoneArgs, &taskDoneReply)
-	return taskDoneReply.isDone
+	call("Coordinator.TaskDone", &taskDoneArgs, &taskDoneReply)
+	return taskDoneReply.IsDone
 }
 
 func doMapTask(InputFile string, taskId int, nReduce int, mapf func(string, string) []KeyValue) {
@@ -126,7 +130,7 @@ func doReduceTask(taskId int, nMap int, reducef func(string, []string) string) {
 
 	sort.Sort(ByKey(kva))
 
-	oname := fmt.Sprintf("mr-%d", taskId)
+	oname := fmt.Sprintf("mr-out-%d", taskId)
 	ofile, err := os.Create(oname)
 	if err != nil {
 		log.Fatalf("cannot open file %v", oname)

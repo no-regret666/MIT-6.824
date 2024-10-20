@@ -1,7 +1,6 @@
 package mr
 
 import (
-	"fmt"
 	"log"
 	"sync"
 )
@@ -12,38 +11,83 @@ import "net/http"
 
 type Coordinator struct {
 	// Your definitions here.
-	mapTaskNum      int //map任务总数
-	reduceTaskNum   int //reduce任务总数
-	mapTask         []Task
-	reduceTask      []Task
-	mapTasksDone    bool //map任务是否全部完成
-	reduceTasksDone bool //reduce任务是否全部完成
+	MapTaskNum      int //map任务总数
+	ReduceTaskNum   int //reduce任务总数
+	MapTask         []Task
+	ReduceTask      []Task
+	MapTasksDone    bool //map任务是否全部完成
+	ReduceTasksDone bool //reduce任务是否全部完成
 
-	mu sync.Mutex
+	Mu sync.Mutex
 }
 
 type Task struct {
-	taskType string
-	taskId   int
-	status   int //0:未开始 1:正在进行 2:已完成
+	TaskType string
+	TaskId   int
+	Status   int //0:未开始 1:正在进行 2:已完成
 
 	//map
-	mapTask string
+	MapTask string
 }
 
 // Your code here -- RPC handlers for the worker to call.
-func (c *Coordinator) taskNum(args *TaskNumArgs, reply *TaskNumReply) error {
-	reply.MapTaskNum = c.mapTaskNum
-	reply.ReduceTaskNum = c.reduceTaskNum
+func (c *Coordinator) TaskNum(args *TaskNumArgs, reply *TaskNumReply) error {
+	reply.MapTaskNum = c.MapTaskNum
+	reply.ReduceTaskNum = c.ReduceTaskNum
 	return nil
 }
 
-func (c *Coordinator) assignTask(args *TaskArgs, reply *Task) error {
-
+func (c *Coordinator) AssignTask(args *TaskArgs, reply *TaskReply) error {
+	c.Mu.Lock()
+	defer c.Mu.Unlock()
+	if !c.MapTasksDone {
+		for _, task := range c.MapTask {
+			if task.Status == 0 {
+				reply.Task = task
+				task.Status = 1
+			} else {
+				continue
+			}
+		}
+	} else {
+		if !c.ReduceTasksDone {
+			for _, task := range c.ReduceTask {
+				if task.Status == 0 {
+					reply.Task = task
+					task.Status = 1
+				} else {
+					continue
+				}
+			}
+		} else {
+			reply.Task.TaskType = ""
+		}
+	}
+	return nil
 }
 
-func (c *Coordinator) taskDone(args *TaskDoneArgs, reply *TaskDoneReply) error {
-
+func (c *Coordinator) TaskDone(args *TaskDoneArgs, reply *TaskDoneReply) error {
+	c.Mu.Lock()
+	defer c.Mu.Unlock()
+	task := args.Task
+	switch args.Msg {
+	case "single":
+		if task.TaskType == "map" {
+			c.MapTask[task.TaskId].Status = 2
+		} else {
+			c.ReduceTask[task.TaskId].Status = 2
+		}
+	case "all":
+		if task.TaskType == "map" {
+			c.MapTask[task.TaskId].Status = 2
+			c.MapTasksDone = true
+		} else {
+			c.ReduceTask[task.TaskId].Status = 2
+			c.ReduceTasksDone = true
+		}
+	}
+	reply.IsDone = true
+	return nil
 }
 
 // an example RPC handler.
@@ -74,6 +118,9 @@ func (c *Coordinator) Done() bool {
 	ret := false
 
 	// Your code here.
+	if c.MapTasksDone && c.ReduceTasksDone {
+		ret = true
+	}
 
 	return ret
 }
@@ -84,28 +131,28 @@ func (c *Coordinator) Done() bool {
 func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	c := Coordinator{}
 	// Your code here.
-	c.mapTaskNum = len(files)
-	c.reduceTaskNum = nReduce
+	c.MapTaskNum = len(files)
+	c.ReduceTaskNum = nReduce
 	for i, file := range files {
-		c.mapTask = append(c.mapTask, Task{
-			taskType: "map",
-			taskId:   i,
-			status:   0,
-			mapTask:  file,
+		c.MapTask = append(c.MapTask, Task{
+			TaskType: "map",
+			TaskId:   i,
+			Status:   0,
+			MapTask:  file,
 		})
 	}
 	for i := 0; i < nReduce; i++ {
-		c.reduceTask = append(c.reduceTask, Task{
-			taskType: "reduce",
-			status:   0,
-			taskId:   i,
+		c.ReduceTask = append(c.ReduceTask, Task{
+			TaskType: "reduce",
+			Status:   0,
+			TaskId:   i,
 		})
 	}
-	c.mapTasksDone = false
-	c.reduceTasksDone = false
+	c.MapTasksDone = false
+	c.ReduceTasksDone = false
 
-	c.mu = sync.Mutex{}
-	fmt.Printf("Coodinator 初始化完毕!")
+	c.Mu = sync.Mutex{}
+	//fmt.Printf("Coodinator 初始化完毕!")
 	c.server()
 	return &c
 }
