@@ -50,9 +50,9 @@ func Worker(mapf func(string, string) []KeyValue,
 		task := taskReply.Task
 		switch task.TaskType {
 		case "":
-			//log.Printf("所有任务完成!")
 			break
 		case "map":
+			fmt.Printf("receive map %d\n", task.TaskId)
 			doMapTask(task.MapTask, task.TaskId, reduceNum, mapf)
 			if task.TaskId < mapNum {
 				taskDone("single", task)
@@ -60,6 +60,7 @@ func Worker(mapf func(string, string) []KeyValue,
 				taskDone("all", task)
 			}
 		case "reduce":
+			fmt.Printf("receive reduce %d\n", task.TaskId)
 			doReduceTask(task.TaskId, mapNum, reducef)
 			if task.TaskId < reduceNum {
 				taskDone("single", task)

@@ -1,6 +1,7 @@
 package mr
 
 import (
+	"fmt"
 	"log"
 	"sync"
 )
@@ -41,20 +42,22 @@ func (c *Coordinator) AssignTask(args *TaskArgs, reply *TaskReply) error {
 	c.Mu.Lock()
 	defer c.Mu.Unlock()
 	if !c.MapTasksDone {
-		for _, task := range c.MapTask {
-			if task.Status == 0 {
-				reply.Task = task
-				task.Status = 1
+		for i, _ := range c.MapTask {
+			if c.MapTask[i].Status == 0 {
+				reply.Task = c.MapTask[i]
+				//fmt.Printf("assign map %d\n", c.ReduceTask[i].TaskId)
+				c.MapTask[i].Status = 1
 			} else {
 				continue
 			}
 		}
 	} else {
 		if !c.ReduceTasksDone {
-			for _, task := range c.ReduceTask {
-				if task.Status == 0 {
-					reply.Task = task
-					task.Status = 1
+			for i, _ := range c.ReduceTask {
+				if c.ReduceTask[i].Status == 0 {
+					reply.Task = c.ReduceTask[i]
+					fmt.Printf("assign reduce %d\n", c.ReduceTask[i].TaskId)
+					c.ReduceTask[i].Status = 1
 				} else {
 					continue
 				}
