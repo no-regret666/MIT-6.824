@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"sort"
+	"time"
 )
 import "log"
 import "net/rpc"
@@ -42,6 +43,7 @@ func Worker(mapf func(string, string) []KeyValue,
 	call("Coordinator.TaskNum", &taskNumArgs, &taskNumReply)
 	mapNum := taskNumReply.MapTaskNum
 	reduceNum := taskNumReply.ReduceTaskNum
+	//fmt.Println(mapNum, reduceNum)
 
 	for {
 		taskArgs := TaskArgs{}
@@ -50,19 +52,23 @@ func Worker(mapf func(string, string) []KeyValue,
 		task := taskReply.Task
 		switch task.TaskType {
 		case "":
-			break
+			if AllDone() {
+				return
+			} else {
+				time.Sleep(time.Second)
+			}
 		case "map":
-			fmt.Printf("receive map %d\n", task.TaskId)
+			//fmt.Printf("receive map %d\n", task.TaskId)
 			doMapTask(task.MapTask, task.TaskId, reduceNum, mapf)
-			if task.TaskId < mapNum {
+			if task.TaskId < mapNum-1 {
 				taskDone("single", task)
 			} else {
 				taskDone("all", task)
 			}
 		case "reduce":
-			fmt.Printf("receive reduce %d\n", task.TaskId)
+			//fmt.Printf("receive reduce %d\n", task.TaskId)
 			doReduceTask(task.TaskId, mapNum, reducef)
-			if task.TaskId < reduceNum {
+			if task.TaskId < reduceNum-1 {
 				taskDone("single", task)
 			} else {
 				taskDone("all", task)
@@ -74,6 +80,13 @@ func Worker(mapf func(string, string) []KeyValue,
 	// 取消注释以将Example RPC发给协调器
 	// CallExample()
 
+}
+
+func AllDone() bool {
+	args := AllDoneArgs{}
+	reply := AllDoneReply{}
+	call("Coordinator.AllDone", &args, &reply)
+	return reply.IsAllDone
 }
 
 func taskDone(msg string, task Task) bool {
@@ -101,10 +114,10 @@ func doMapTask(InputFile string, taskId int, nReduce int, mapf func(string, stri
 	for _, kv := range kva {
 		reduceId := ihash(kv.Key) % nReduce
 		filename := fmt.Sprintf("mr-%d-%d", taskId, reduceId)
-		file, err := os.OpenFile(filename, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
-		if err != nil {
-			log.Fatalf("cannot open file %v", filename)
-		}
+		file, _ := os.OpenFile(filename, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
+		//if err != nil {
+		//	log.Fatalf("cannot open file %v", filename)
+		//}
 		enc := json.NewEncoder(file)
 		enc.Encode(&kv)
 		file.Close()
@@ -115,10 +128,10 @@ func doReduceTask(taskId int, nMap int, reducef func(string, []string) string) {
 	kva := []KeyValue{}
 	for i := 0; i < nMap; i++ {
 		filename := fmt.Sprintf("mr-%d-%d", i, taskId)
-		file, err := os.Open(filename)
-		if err != nil {
-			log.Fatalf("cannot open file %v", filename)
-		}
+		file, _ := os.Open(filename)
+		//if err != nil {
+		//	log.Fatalf("cannot open file %v", filename)
+		//}
 		dec := json.NewDecoder(file)
 		for {
 			var kv KeyValue

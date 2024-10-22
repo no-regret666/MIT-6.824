@@ -1,9 +1,9 @@
 package mr
 
 import (
-	"fmt"
 	"log"
 	"sync"
+	"time"
 )
 import "net"
 import "os"
@@ -42,30 +42,43 @@ func (c *Coordinator) AssignTask(args *TaskArgs, reply *TaskReply) error {
 	c.Mu.Lock()
 	defer c.Mu.Unlock()
 	if !c.MapTasksDone {
-		for i, _ := range c.MapTask {
+		for i := range c.MapTask {
 			if c.MapTask[i].Status == 0 {
+				//fmt.Println(i)
 				reply.Task = c.MapTask[i]
-				//fmt.Printf("assign map %d\n", c.ReduceTask[i].TaskId)
 				c.MapTask[i].Status = 1
-			} else {
-				continue
+				go func(task *Task) {
+					time.Sleep(10 * time.Second)
+					c.Mu.Lock()
+					if task.Status != 2 {
+						task.Status = 0
+					}
+					c.Mu.Unlock()
+				}(&c.MapTask[i])
+				//fmt.Printf("assign map %d\n", c.MapTask[i].TaskId)
+				return nil
 			}
 		}
-	} else {
-		if !c.ReduceTasksDone {
-			for i, _ := range c.ReduceTask {
-				if c.ReduceTask[i].Status == 0 {
-					reply.Task = c.ReduceTask[i]
-					fmt.Printf("assign reduce %d\n", c.ReduceTask[i].TaskId)
-					c.ReduceTask[i].Status = 1
-				} else {
-					continue
-				}
+	} else if !c.ReduceTasksDone {
+		for i := range c.ReduceTask {
+			if c.ReduceTask[i].Status == 0 {
+				reply.Task = c.ReduceTask[i]
+				c.ReduceTask[i].Status = 1
+				go func(task *Task) {
+					time.Sleep(10 * time.Second)
+					c.Mu.Lock()
+					if task.Status != 2 {
+						task.Status = 0
+					}
+					c.Mu.Unlock()
+				}(&c.ReduceTask[i])
+				//fmt.Printf("assign reduce %d\n", c.ReduceTask[i].TaskId)
+				return nil
 			}
-		} else {
-			reply.Task.TaskType = ""
 		}
 	}
+
+	reply.Task.TaskType = ""
 	return nil
 }
 
@@ -90,6 +103,11 @@ func (c *Coordinator) TaskDone(args *TaskDoneArgs, reply *TaskDoneReply) error {
 		}
 	}
 	reply.IsDone = true
+	return nil
+}
+
+func (c *Coordinator) AllDone(args *AllDoneArgs, reply *AllDoneReply) error {
+	reply.IsAllDone = c.ReduceTasksDone
 	return nil
 }
 
@@ -119,9 +137,9 @@ func (c *Coordinator) server() {
 // if the entire job has finished.
 func (c *Coordinator) Done() bool {
 	ret := false
-
 	// Your code here.
-	if c.MapTasksDone && c.ReduceTasksDone {
+	//fmt.Println(c.MapTasksDone)
+	if c.ReduceTasksDone {
 		ret = true
 	}
 
@@ -136,20 +154,22 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	// Your code here.
 	c.MapTaskNum = len(files)
 	c.ReduceTaskNum = nReduce
+	c.MapTask = make([]Task, len(files))
+	c.ReduceTask = make([]Task, nReduce)
 	for i, file := range files {
-		c.MapTask = append(c.MapTask, Task{
+		c.MapTask[i] = Task{
 			TaskType: "map",
 			TaskId:   i,
 			Status:   0,
 			MapTask:  file,
-		})
+		}
 	}
 	for i := 0; i < nReduce; i++ {
-		c.ReduceTask = append(c.ReduceTask, Task{
+		c.ReduceTask[i] = Task{
 			TaskType: "reduce",
-			Status:   0,
 			TaskId:   i,
-		})
+			Status:   0,
+		}
 	}
 	c.MapTasksDone = false
 	c.ReduceTasksDone = false
