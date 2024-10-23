@@ -55,7 +55,7 @@ func (c *Coordinator) AssignTask(args *TaskArgs, reply *TaskReply) error {
 					}
 					c.Mu.Unlock()
 				}(&c.MapTask[i])
-				//fmt.Printf("assign map %d\n", c.MapTask[i].TaskId)
+				log.Printf("assign map %d\n", c.MapTask[i].TaskId)
 				return nil
 			}
 		}
@@ -72,7 +72,7 @@ func (c *Coordinator) AssignTask(args *TaskArgs, reply *TaskReply) error {
 					}
 					c.Mu.Unlock()
 				}(&c.ReduceTask[i])
-				//fmt.Printf("assign reduce %d\n", c.ReduceTask[i].TaskId)
+				log.Printf("assign reduce %d\n", c.ReduceTask[i].TaskId)
 				return nil
 			}
 		}
@@ -97,6 +97,11 @@ func (c *Coordinator) TaskDone(args *TaskDoneArgs, reply *TaskDoneReply) error {
 		if task.TaskType == "map" {
 			c.MapTask[task.TaskId].Status = 2
 			c.MapTasksDone = true
+			for i := 0; i < c.MapTaskNum; i++ {
+				if c.MapTask[i].Status == 0 {
+					c.MapTasksDone = false
+				}
+			}
 		} else {
 			c.ReduceTask[task.TaskId].Status = 2
 			c.ReduceTasksDone = true

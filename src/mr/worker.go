@@ -43,7 +43,6 @@ func Worker(mapf func(string, string) []KeyValue,
 	call("Coordinator.TaskNum", &taskNumArgs, &taskNumReply)
 	mapNum := taskNumReply.MapTaskNum
 	reduceNum := taskNumReply.ReduceTaskNum
-	//fmt.Println(mapNum, reduceNum)
 
 	for {
 		taskArgs := TaskArgs{}
@@ -58,7 +57,7 @@ func Worker(mapf func(string, string) []KeyValue,
 				time.Sleep(time.Second)
 			}
 		case "map":
-			//fmt.Printf("receive map %d\n", task.TaskId)
+			log.Printf("receive map %d\n", task.TaskId)
 			doMapTask(task.MapTask, task.TaskId, reduceNum, mapf)
 			if task.TaskId < mapNum-1 {
 				taskDone("single", task)
@@ -66,7 +65,7 @@ func Worker(mapf func(string, string) []KeyValue,
 				taskDone("all", task)
 			}
 		case "reduce":
-			//fmt.Printf("receive reduce %d\n", task.TaskId)
+			log.Printf("receive reduce %d\n", task.TaskId)
 			doReduceTask(task.TaskId, mapNum, reducef)
 			if task.TaskId < reduceNum-1 {
 				taskDone("single", task)
@@ -90,6 +89,7 @@ func AllDone() bool {
 }
 
 func taskDone(msg string, task Task) bool {
+	log.Printf("finish %s %d", task.TaskType, task.TaskId)
 	taskDoneArgs := TaskDoneArgs{}
 	taskDoneArgs.Msg = msg
 	taskDoneArgs.Task = task
