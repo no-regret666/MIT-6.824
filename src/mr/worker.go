@@ -45,33 +45,35 @@ func Worker(mapf func(string, string) []KeyValue,
 	reduceNum := taskNumReply.ReduceTaskNum
 
 	for {
-		taskArgs := TaskArgs{}
-		taskReply := TaskReply{}
-		call("Coordinator.AssignTask", &taskArgs, &taskReply)
-		task := taskReply.Task
-		switch task.TaskType {
-		case "":
-			if AllDone() {
-				return
-			} else {
-				time.Sleep(time.Second)
-			}
-		case "map":
-			log.Printf("receive map %d\n", task.TaskId)
+		mapTaskArgs := MapTaskArgs{}
+		mapTaskReply := MapTaskReply{}
+		call("Coordinator.AssignMapTask", &mapTaskArgs, &mapTaskReply)
+		task := mapTaskReply.Task
+		if task.TaskType != "" {
 			doMapTask(task.MapTask, task.TaskId, reduceNum, mapf)
-			if task.TaskId < mapNum-1 {
-				taskDone("single", task)
-			} else {
-				taskDone("all", task)
+			taskDone("single", task)
+			//log.Printf("finish %s %d", task.TaskType, task.TaskId)
+		} else {
+			if taskDone("mapAll", task) {
+				break
 			}
-		case "reduce":
-			log.Printf("receive reduce %d\n", task.TaskId)
+			time.Sleep(time.Second)
+		}
+	}
+
+	for {
+		reduceTaskArgs := ReduceTaskArgs{}
+		reduceTaskReply := ReduceTaskReply{}
+		call("Coordinator.AssignReduceTask", &reduceTaskArgs, &reduceTaskReply)
+		task := reduceTaskReply.Task
+		if task.TaskType != "" {
 			doReduceTask(task.TaskId, mapNum, reducef)
-			if task.TaskId < reduceNum-1 {
-				taskDone("single", task)
-			} else {
-				taskDone("all", task)
+			taskDone("single", task)
+		} else {
+			if taskDone("reduceAll", task) {
+				return
 			}
+			time.Sleep(time.Second)
 		}
 	}
 
@@ -89,7 +91,7 @@ func AllDone() bool {
 }
 
 func taskDone(msg string, task Task) bool {
-	log.Printf("finish %s %d", task.TaskType, task.TaskId)
+	//log.Printf("finish %s %d", task.TaskType, task.TaskId)
 	taskDoneArgs := TaskDoneArgs{}
 	taskDoneArgs.Msg = msg
 	taskDoneArgs.Task = task

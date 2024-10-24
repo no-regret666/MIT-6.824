@@ -30,9 +30,15 @@ type TaskNumReply struct {
 	ReduceTaskNum int
 }
 
-type TaskArgs struct{}
+type MapTaskArgs struct{}
 
-type TaskReply struct {
+type MapTaskReply struct {
+	Task Task
+}
+
+type ReduceTaskArgs struct{}
+
+type ReduceTaskReply struct {
 	Task Task
 }
 

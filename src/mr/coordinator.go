@@ -38,46 +38,47 @@ func (c *Coordinator) TaskNum(args *TaskNumArgs, reply *TaskNumReply) error {
 	return nil
 }
 
-func (c *Coordinator) AssignTask(args *TaskArgs, reply *TaskReply) error {
+func (c *Coordinator) AssignMapTask(args *MapTaskArgs, reply *MapTaskReply) error {
 	c.Mu.Lock()
 	defer c.Mu.Unlock()
-	if !c.MapTasksDone {
-		for i := range c.MapTask {
-			if c.MapTask[i].Status == 0 {
-				//fmt.Println(i)
-				reply.Task = c.MapTask[i]
-				c.MapTask[i].Status = 1
-				go func(task *Task) {
-					time.Sleep(10 * time.Second)
-					c.Mu.Lock()
-					if task.Status != 2 {
-						task.Status = 0
-					}
-					c.Mu.Unlock()
-				}(&c.MapTask[i])
-				log.Printf("assign map %d\n", c.MapTask[i].TaskId)
-				return nil
-			}
-		}
-	} else if !c.ReduceTasksDone {
-		for i := range c.ReduceTask {
-			if c.ReduceTask[i].Status == 0 {
-				reply.Task = c.ReduceTask[i]
-				c.ReduceTask[i].Status = 1
-				go func(task *Task) {
-					time.Sleep(10 * time.Second)
-					c.Mu.Lock()
-					if task.Status != 2 {
-						task.Status = 0
-					}
-					c.Mu.Unlock()
-				}(&c.ReduceTask[i])
-				log.Printf("assign reduce %d\n", c.ReduceTask[i].TaskId)
-				return nil
-			}
+	for i := range c.MapTask {
+		if c.MapTask[i].Status == 0 {
+			//fmt.Println(i)
+			reply.Task = c.MapTask[i]
+			c.MapTask[i].Status = 1
+			go func(task *Task) {
+				time.Sleep(10 * time.Second)
+				c.Mu.Lock()
+				if task.Status != 2 {
+					task.Status = 0
+				}
+				c.Mu.Unlock()
+			}(&c.MapTask[i])
+			return nil
 		}
 	}
+	reply.Task.TaskType = ""
+	return nil
+}
 
+func (c *Coordinator) AssignReduceTask(args *ReduceTaskArgs, reply *ReduceTaskReply) error {
+	c.Mu.Lock()
+	defer c.Mu.Unlock()
+	for i := range c.ReduceTask {
+		if c.ReduceTask[i].Status == 0 {
+			reply.Task = c.ReduceTask[i]
+			c.ReduceTask[i].Status = 1
+			go func(task *Task) {
+				time.Sleep(10 * time.Second)
+				c.Mu.Lock()
+				if task.Status != 2 {
+					task.Status = 0
+				}
+				c.Mu.Unlock()
+			}(&c.ReduceTask[i])
+			return nil
+		}
+	}
 	reply.Task.TaskType = ""
 	return nil
 }
@@ -86,6 +87,7 @@ func (c *Coordinator) TaskDone(args *TaskDoneArgs, reply *TaskDoneReply) error {
 	c.Mu.Lock()
 	defer c.Mu.Unlock()
 	task := args.Task
+	reply.IsDone = true
 	switch args.Msg {
 	case "single":
 		if task.TaskType == "map" {
@@ -93,21 +95,24 @@ func (c *Coordinator) TaskDone(args *TaskDoneArgs, reply *TaskDoneReply) error {
 		} else {
 			c.ReduceTask[task.TaskId].Status = 2
 		}
-	case "all":
-		if task.TaskType == "map" {
-			c.MapTask[task.TaskId].Status = 2
-			c.MapTasksDone = true
-			for i := 0; i < c.MapTaskNum; i++ {
-				if c.MapTask[i].Status == 0 {
-					c.MapTasksDone = false
-				}
+	case "mapAll":
+		c.MapTasksDone = true
+		for i := 0; i < c.MapTaskNum; i++ {
+			if c.MapTask[i].Status != 2 {
+				reply.IsDone = false
+				c.MapTasksDone = false
 			}
-		} else {
-			c.ReduceTask[task.TaskId].Status = 2
-			c.ReduceTasksDone = true
+		}
+	case "reduceAll":
+		c.ReduceTasksDone = true
+		for i := 0; i < c.ReduceTaskNum; i++ {
+			if c.ReduceTask[i].Status != 2 {
+				reply.IsDone = false
+				c.ReduceTasksDone = false
+			}
 		}
 	}
-	reply.IsDone = true
+
 	return nil
 }
 
