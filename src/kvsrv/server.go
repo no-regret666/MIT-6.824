@@ -18,7 +18,12 @@ type KVServer struct {
 	mu sync.Mutex
 	// Your definitions here.
 	kv      map[string]string
-	history map[uint64]string
+	history map[int64]*Result
+}
+
+type Result struct {
+	lastSeq uint64
+	value   string
 }
 
 func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
@@ -32,27 +37,35 @@ func (kv *KVServer) Put(args *PutAppendArgs, reply *PutAppendReply) {
 	// Your code here.
 	kv.mu.Lock()
 	defer kv.mu.Unlock()
-	_, exists := kv.history[args.Seq]
+	result, exists := kv.history[args.Identifier]
 	if exists {
-		return
+		if result.lastSeq >= args.Seq {
+			return
+		}
+	} else {
+		kv.history[args.Identifier] = new(Result)
 	}
 	kv.kv[args.Key] = args.Value
-	kv.history[args.Seq] = ""
+	kv.history[args.Identifier].lastSeq = args.Seq
 }
 
 func (kv *KVServer) Append(args *PutAppendArgs, reply *PutAppendReply) {
 	// Your code here.
 	kv.mu.Lock()
 	defer kv.mu.Unlock()
-	result, exists := kv.history[args.Seq]
+	result, exists := kv.history[args.Identifier]
 	if exists {
-		reply.Value = result
-		return
+		if result.lastSeq >= args.Seq {
+			reply.Value = result.value
+			return
+		}
 	} else {
-		kv.history[args.Seq] = kv.kv[args.Key]
-		reply.Value = kv.kv[args.Key]
-		kv.kv[args.Key] += args.Value
+		kv.history[args.Identifier] = new(Result)
 	}
+	kv.history[args.Identifier].value = kv.kv[args.Key]
+	reply.Value = kv.kv[args.Key]
+	kv.kv[args.Key] += args.Value
+	kv.history[args.Identifier].lastSeq = args.Seq
 }
 
 func StartKVServer() *KVServer {
@@ -60,6 +73,6 @@ func StartKVServer() *KVServer {
 
 	// You may need initialization code here.
 	kv.kv = make(map[string]string)
-	kv.history = make(map[uint64]string)
+	kv.history = make(map[int64]*Result)
 	return kv
 }
