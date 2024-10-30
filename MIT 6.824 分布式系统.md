@@ -170,3 +170,11 @@ Leader在发送`AppendEntries`消息时，会附带前一个槽位的信息。
 （2）Leader为每个Follower维护了`nextIndex`，`nextIndex`的初始值是从新任Leader的最后一条日志开始。Leader接收到Follower的拒绝后，会减小对应的`nextIndex`，直至与Follower本地的Log匹配。
 
 （3）之后Follower需要先删除本地相应的Log（如果有的话），再用`AppendEntries`中的内容替代本地Log。        而Leader接收到`True`的回应时，会增加相应的`nextIndex`到下一次添加的Log槽位
+
+### 选举约束
+
+在处理别的节点发来的`RequestVote RPC`时，需要做一些检查才能投出赞成票，即节点只能向满足下面条件之一的候选人投出赞成票：
+
+1. 候选人最后一条Log条目的任期号**大于**本地最后一条Log条目的任期号；
+
+2. 或者，候选人最后一条Log条目的任期号**等于**本地最后一条Log条目的任期号，且候选人的Log记录长度**大于等于**本地Log记录的长度
