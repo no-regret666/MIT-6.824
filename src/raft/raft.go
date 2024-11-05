@@ -86,8 +86,6 @@ type Log struct {
 // believes it is the leader.
 func (rf *Raft) GetState() (int, bool) {
 	// Your code here (3A).
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
 	return rf.currentTerm, rf.state == "Leader"
 }
 
@@ -125,7 +123,7 @@ func (rf *Raft) readPersist(data []byte) {
 	//   error...
 	// } else {
 	//   rf.xxx = xxx
-	//   rf.yyy = yyy
+	//  rf.yyy = yyy
 	// }
 }
 
@@ -159,10 +157,8 @@ type RequestVoteReply struct {
 // example RequestVote RPC handler.
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// Your code here (3A, 3B).
-	//log.Printf("嘻嘻嘻嘻嘻嘻嘻嘻1")
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
-	//log.Printf("嘻嘻嘻嘻嘻嘻嘻嘻2")
 	if args.Term < rf.currentTerm || (args.Term == rf.currentTerm && rf.votedFor != -1 && rf.votedFor != args.CandidateId) {
 		reply.Term = rf.currentTerm
 		reply.VoteGranted = false
@@ -287,18 +283,19 @@ func (rf *Raft) startElection() {
 			continue
 		}
 		go func(peer int) {
-			//log.Printf("哈哈哈哈哈哈哈")
 			reply := RequestVoteReply{}
 			if rf.sendRequestVote(peer, &args, &reply) {
 				rf.mu.Lock()
 				defer rf.mu.Unlock()
 				//log.Printf("%d %d->%d requestVote", args.Term, args.CandidateId, peer)
 				if reply.VoteGranted {
-					voted++
-					if voted >= len(rf.peers)/2+1 {
-						//log.Printf("%d %d become Leader", rf.currentTerm, rf.me)
-						rf.state = "Leader"
-						rf.startAppendEntries(true)
+					if rf.currentTerm == args.Term && rf.state == "Candidate" {
+						voted++
+						if voted >= len(rf.peers)/2+1 {
+							//log.Printf("%d %d become Leader", rf.currentTerm, rf.me)
+							rf.state = "Leader"
+							rf.startAppendEntries(true)
+						}
 					}
 				} else if reply.Term > rf.currentTerm {
 					//log.Printf("%d %d fail to be Leader,become Follower", rf.currentTerm, rf.me)
