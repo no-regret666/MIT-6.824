@@ -458,7 +458,9 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs,
 		return
 	}
 	rf.log = append(rf.log[:args.PrevLogIndex], args.Log...)
-
+	if args.LeaderCommit > rf.commitIndex {
+		rf.commitIndex = min(args.LeaderCommit, len(rf.log)-1)
+	}
 }
 
 // the service or tester wants to create a Raft server. the ports
