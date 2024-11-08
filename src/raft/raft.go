@@ -62,20 +62,20 @@ type Raft struct {
 	// Your data here (3A, 3B, 3C).
 	// Look at the paper's Figure 2 for a description of what
 	// state a Raft server must maintain.
+	currentTerm int   //当前任期
+	votedFor    int   //当前任期投票对象
+	log         []Log //日志
+
 	electionTimeout  time.Duration //选举超时时间
 	time             time.Time     //开始计算选举超时的时间
 	heartBeatTimeout time.Duration //心跳超时时间
 	lastHeartBeat    time.Time     //上一次心跳时间
 	state            string        //当前身份
-
-	currentTerm int   //当前任期
-	votedFor    int   //当前任期投票对象
-	log         []Log //日志
-
-	commitIndex int   //已提交的最高的日志条目的索引
-	lastApplied int   //已经被应用到状态机的最高的日志条目的索引
-	nextIndex   []int //对于每一台服务器，发送到该服务器的下一个日志条目的索引
-	matchIndex  []int //对于每一台服务器，已知的已经复制到该服务器的最高日志条目的索引
+	applyCh          chan ApplyMsg //应用状态机通道
+	commitIndex      int           //已提交的最高的日志条目的索引
+	lastApplied      int           //已经被应用到状态机的最高的日志条目的索引
+	nextIndex        []int         //对于每一台服务器，发送到该服务器的下一个日志条目的索引
+	matchIndex       []int         //对于每一台服务器，已知的已经复制到该服务器的最高日志条目的索引
 }
 
 type Log struct {
@@ -360,6 +360,7 @@ func (rf *Raft) ticker() {
 func (rf *Raft) startAppendEntries(isHeartBeat bool) {
 	if isHeartBeat {
 		args := AppendEntriesArgs{}
+		args.Type = "heartbeat"
 		args.Term = rf.currentTerm
 		args.LeaderId = rf.me
 		for peer := range rf.peers {
@@ -382,6 +383,7 @@ func (rf *Raft) startAppendEntries(isHeartBeat bool) {
 		}
 	} else {
 		args := AppendEntriesArgs{}
+		args.Type = "appendEntries"
 		args.Term = rf.currentTerm
 		args.LeaderId = rf.me
 		args.LeaderCommit = rf.commitIndex
@@ -397,8 +399,22 @@ func (rf *Raft) startAppendEntries(isHeartBeat bool) {
 				reply := AppendEntriesReply{}
 				if rf.sendAppendEntries(peer, &args, &reply) {
 					rf.mu.Lock()
-					defer rf.mu.Unlock()
 					DPrintf("%d %d->%d log", rf.currentTerm, rf.me, peer)
+					if reply.Term > rf.currentTerm {
+						rf.state = "Follower"
+						rf.currentTerm = reply.Term
+						rf.votedFor = -1
+					}
+					if reply.Success {
+						rf.nextIndex[peer] = len(rf.log)
+						rf.matchIndex[peer] = len(rf.log) - 1
+						rf.mu.Unlock()
+						return
+					} else {
+						rf.nextIndex[peer] = reply.XIndex
+						rf.mu.Unlock()
+						rf.startAppendEntries(false)
+					}
 				}
 			}(peer)
 		}
@@ -411,6 +427,7 @@ func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *Ap
 }
 
 type AppendEntriesArgs struct {
+	Type         string
 	Term         int
 	LeaderId     int
 	PrevLogIndex int
@@ -423,14 +440,11 @@ type AppendEntriesReply struct {
 	Term    int
 	Success bool
 	XTerm   int //冲突Log任期号
-	XIndex  int //对应任期号为XTerm的第一条Log的槽位号/最后一条Log槽位号
+	XIndex  int //对应任期号为XTerm的第一条Log的槽位号/下一条日志索引
 }
 
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs,
 	reply *AppendEntriesReply) {
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
-	DPrintf("%d %d->%d heartbeat", args.Term, args.LeaderId, rf.me)
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 	reply.Term = rf.currentTerm
@@ -446,20 +460,42 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs,
 	}
 	rf.state = "Follower"
 	rf.resetTimeout()
-	if args.PrevLogIndex >= len(rf.log) {
-		reply.XIndex = len(rf.log) - 1
-		return
-	}
-	if rf.log[args.PrevLogIndex].Term != args.PrevLogTerm {
-		reply.XTerm = rf.log[args.PrevLogIndex].Term
-		for reply.XIndex > 0 && rf.log[reply.XIndex-1].Term == reply.XTerm {
-			reply.XIndex--
+	if args.Type == "appendEntries" {
+		if args.PrevLogIndex >= len(rf.log) {
+			reply.XIndex = len(rf.log)
+			return
 		}
-		return
+		if rf.log[args.PrevLogIndex].Term != args.PrevLogTerm {
+			reply.XTerm = rf.log[args.PrevLogIndex].Term
+			for reply.XIndex > 0 && rf.log[reply.XIndex-1].Term == reply.XTerm {
+				reply.XIndex--
+			}
+			return
+		}
+		rf.log = append(rf.log[:args.PrevLogIndex], args.Log...)
 	}
-	rf.log = append(rf.log[:args.PrevLogIndex], args.Log...)
 	if args.LeaderCommit > rf.commitIndex {
 		rf.commitIndex = min(args.LeaderCommit, len(rf.log)-1)
+	}
+	reply.Success = true
+}
+
+func (rf *Raft) applyCommited() {
+	for {
+		rf.mu.Lock()
+		if rf.commitIndex <= rf.lastApplied {
+			continue
+		}
+		command := rf.log[rf.lastApplied].Command
+		commandIndex := rf.lastApplied
+		rf.lastApplied++
+		rf.mu.Unlock()
+		msg := ApplyMsg{
+			CommandValid: true,
+			Command:      command,
+			CommandIndex: commandIndex,
+		}
+		rf.applyCh <- msg
 	}
 }
 
@@ -491,6 +527,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.matchIndex = make([]int, len(rf.peers))
 	rf.resetTimeout()
 	rf.heartBeatTimeout = heartBeatTimeout
+	rf.applyCh = applyCh
 
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
