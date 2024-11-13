@@ -1,0 +1,184 @@
+Test (3B): RPC byte count ...
+2024/11/13 22:54:30 [1] 1 try to be Leader
+2024/11/13 22:54:30 [1] 0 agree 1 to become leader
+2024/11/13 22:54:30 [1] 1 get more than half votes,succeed to be leader
+2024/11/13 22:54:30 [1] 2 agree 1 to become leader
+2024/11/13 22:54:30 [1] 1 send 2 heartbeat
+2024/11/13 22:54:30 [1] 1 send 0 heartbeat
+2024/11/13 22:54:30 [1] 1 receive a new command,then append at 1
+2024/11/13 22:54:30 [1] 1 send 0 appendEntries index 0
+2024/11/13 22:54:30 [1] 0 successfully append logs from the leader
+2024/11/13 22:54:30 [1] 1 update commitIndex to 1
+2024/11/13 22:54:30 [1] 1 send 2 appendEntries index 0
+2024/11/13 22:54:30 [1] 2 successfully append logs from the leader
+2024/11/13 22:54:30 [1] 1 update commitIndex to 1
+2024/11/13 22:54:30 [1] 1 apply the log 1
+2024/11/13 22:54:30 [1] 1 send 2 heartbeat
+2024/11/13 22:54:30 [1] 2 update commitIndex to 1 according to the leader
+2024/11/13 22:54:30 [1] 1 send 0 heartbeat
+2024/11/13 22:54:30 [1] 0 update commitIndex to 1 according to the leader
+2024/11/13 22:54:30 [1] 0 apply the log 1
+2024/11/13 22:54:30 [1] 2 apply the log 1
+2024/11/13 22:54:30 [1] 1 receive a new command,then append at 2
+2024/11/13 22:54:30 [1] 1 send 2 appendEntries index 1
+2024/11/13 22:54:30 [1] 2 successfully append logs from the leader
+2024/11/13 22:54:30 [1] 1 update commitIndex to 2
+2024/11/13 22:54:30 [1] 1 send 0 appendEntries index 1
+2024/11/13 22:54:30 [1] 0 successfully append logs from the leader
+2024/11/13 22:54:30 [1] 1 update commitIndex to 2
+2024/11/13 22:54:30 [1] 1 apply the log 2
+2024/11/13 22:54:30 [1] 1 send 0 heartbeat
+2024/11/13 22:54:30 [1] 0 update commitIndex to 2 according to the leader
+2024/11/13 22:54:30 [1] 1 send 2 heartbeat
+2024/11/13 22:54:30 [1] 2 update commitIndex to 2 according to the leader
+2024/11/13 22:54:30 [1] 2 apply the log 2
+2024/11/13 22:54:30 [1] 0 apply the log 2
+2024/11/13 22:54:30 [1] 1 send 0 heartbeat
+2024/11/13 22:54:30 [1] 1 send 2 heartbeat
+2024/11/13 22:54:30 [1] 1 receive a new command,then append at 3
+2024/11/13 22:54:30 [1] 1 send 0 appendEntries index 2
+2024/11/13 22:54:30 [1] 0 successfully append logs from the leader
+2024/11/13 22:54:30 [1] 1 send 2 appendEntries index 2
+2024/11/13 22:54:30 [1] 1 update commitIndex to 3
+2024/11/13 22:54:30 [1] 2 successfully append logs from the leader
+2024/11/13 22:54:30 [1] 1 update commitIndex to 3
+2024/11/13 22:54:30 [1] 1 apply the log 3
+2024/11/13 22:54:30 [1] 1 send 0 heartbeat
+2024/11/13 22:54:30 [1] 0 update commitIndex to 3 according to the leader
+2024/11/13 22:54:30 [1] 1 send 2 heartbeat
+2024/11/13 22:54:30 [1] 2 update commitIndex to 3 according to the leader
+2024/11/13 22:54:31 [1] 0 apply the log 3
+2024/11/13 22:54:31 [1] 2 apply the log 3
+2024/11/13 22:54:31 [1] 1 send 0 heartbeat
+2024/11/13 22:54:31 [1] 1 send 2 heartbeat
+2024/11/13 22:54:31 [1] 1 receive a new command,then append at 4
+2024/11/13 22:54:31 [1] 1 send 0 appendEntries index 3
+2024/11/13 22:54:31 [1] 0 successfully append logs from the leader
+2024/11/13 22:54:31 [1] 1 send 2 appendEntries index 3
+2024/11/13 22:54:31 [1] 2 successfully append logs from the leader
+2024/11/13 22:54:31 [1] 1 update commitIndex to 4
+2024/11/13 22:54:31 [1] 1 update commitIndex to 4
+2024/11/13 22:54:31 [1] 1 apply the log 4
+2024/11/13 22:54:31 [1] 1 send 0 heartbeat
+2024/11/13 22:54:31 [1] 0 update commitIndex to 4 according to the leader
+2024/11/13 22:54:31 [1] 1 send 2 heartbeat
+2024/11/13 22:54:31 [1] 2 update commitIndex to 4 according to the leader
+2024/11/13 22:54:31 [1] 2 apply the log 4
+2024/11/13 22:54:31 [1] 0 apply the log 4
+2024/11/13 22:54:31 [1] 1 send 0 heartbeat
+2024/11/13 22:54:31 [1] 1 send 2 heartbeat
+2024/11/13 22:54:31 [1] 1 receive a new command,then append at 5
+2024/11/13 22:54:31 [1] 1 send 0 appendEntries index 4
+2024/11/13 22:54:31 [1] 0 successfully append logs from the leader
+2024/11/13 22:54:31 [1] 1 update commitIndex to 5
+2024/11/13 22:54:31 [1] 1 send 2 appendEntries index 4
+2024/11/13 22:54:31 [1] 2 successfully append logs from the leader
+2024/11/13 22:54:31 [1] 1 update commitIndex to 5
+2024/11/13 22:54:31 [1] 1 apply the log 5
+2024/11/13 22:54:31 [1] 1 send 0 heartbeat
+2024/11/13 22:54:31 [1] 0 update commitIndex to 5 according to the leader
+2024/11/13 22:54:31 [1] 1 send 2 heartbeat
+2024/11/13 22:54:31 [1] 2 update commitIndex to 5 according to the leader
+2024/11/13 22:54:31 [1] 0 apply the log 5
+2024/11/13 22:54:31 [1] 2 apply the log 5
+2024/11/13 22:54:31 [1] 1 send 0 heartbeat
+2024/11/13 22:54:31 [1] 1 send 2 heartbeat
+2024/11/13 22:54:31 [1] 1 receive a new command,then append at 6
+2024/11/13 22:54:31 [1] 1 send 0 appendEntries index 5
+2024/11/13 22:54:31 [1] 0 successfully append logs from the leader
+2024/11/13 22:54:31 [1] 1 send 2 appendEntries index 5
+2024/11/13 22:54:31 [1] 1 update commitIndex to 6
+2024/11/13 22:54:31 [1] 2 successfully append logs from the leader
+2024/11/13 22:54:31 [1] 1 update commitIndex to 6
+2024/11/13 22:54:31 [1] 1 apply the log 6
+2024/11/13 22:54:31 [1] 1 send 0 heartbeat
+2024/11/13 22:54:31 [1] 0 update commitIndex to 6 according to the leader
+2024/11/13 22:54:31 [1] 1 send 2 heartbeat
+2024/11/13 22:54:31 [1] 2 update commitIndex to 6 according to the leader
+2024/11/13 22:54:31 [1] 0 apply the log 6
+2024/11/13 22:54:31 [1] 2 apply the log 6
+2024/11/13 22:54:31 [1] 1 send 0 heartbeat
+2024/11/13 22:54:31 [1] 1 send 2 heartbeat
+2024/11/13 22:54:31 [1] 1 receive a new command,then append at 7
+2024/11/13 22:54:31 [1] 1 send 0 appendEntries index 6
+2024/11/13 22:54:31 [1] 0 successfully append logs from the leader
+2024/11/13 22:54:31 [1] 1 send 2 appendEntries index 6
+2024/11/13 22:54:31 [1] 1 update commitIndex to 7
+2024/11/13 22:54:31 [1] 2 successfully append logs from the leader
+2024/11/13 22:54:31 [1] 1 update commitIndex to 7
+2024/11/13 22:54:31 [1] 1 apply the log 7
+2024/11/13 22:54:31 [1] 1 send 0 heartbeat
+2024/11/13 22:54:31 [1] 0 update commitIndex to 7 according to the leader
+2024/11/13 22:54:31 [1] 1 send 2 heartbeat
+2024/11/13 22:54:31 [1] 2 update commitIndex to 7 according to the leader
+2024/11/13 22:54:31 [1] 2 apply the log 7
+2024/11/13 22:54:31 [1] 0 apply the log 7
+2024/11/13 22:54:31 [1] 1 send 0 heartbeat
+2024/11/13 22:54:31 [1] 1 send 2 heartbeat
+2024/11/13 22:54:31 [1] 1 receive a new command,then append at 8
+2024/11/13 22:54:31 [1] 1 send 0 appendEntries index 7
+2024/11/13 22:54:31 [1] 0 successfully append logs from the leader
+2024/11/13 22:54:31 [1] 1 update commitIndex to 8
+2024/11/13 22:54:31 [1] 1 send 2 appendEntries index 7
+2024/11/13 22:54:31 [1] 2 successfully append logs from the leader
+2024/11/13 22:54:31 [1] 1 update commitIndex to 8
+2024/11/13 22:54:31 [1] 1 apply the log 8
+2024/11/13 22:54:31 [1] 1 send 0 heartbeat
+2024/11/13 22:54:31 [1] 0 update commitIndex to 8 according to the leader
+2024/11/13 22:54:31 [1] 1 send 2 heartbeat
+2024/11/13 22:54:31 [1] 2 update commitIndex to 8 according to the leader
+2024/11/13 22:54:32 [1] 0 apply the log 8
+2024/11/13 22:54:32 [1] 2 apply the log 8
+2024/11/13 22:54:32 [1] 1 send 0 heartbeat
+2024/11/13 22:54:32 [1] 1 send 2 heartbeat
+2024/11/13 22:54:32 [1] 1 receive a new command,then append at 9
+2024/11/13 22:54:32 [1] 1 send 0 appendEntries index 8
+2024/11/13 22:54:32 [1] 0 successfully append logs from the leader
+2024/11/13 22:54:32 [1] 1 send 2 appendEntries index 8
+2024/11/13 22:54:32 [1] 1 update commitIndex to 9
+2024/11/13 22:54:32 [1] 2 successfully append logs from the leader
+2024/11/13 22:54:32 [1] 1 update commitIndex to 9
+2024/11/13 22:54:32 [1] 1 apply the log 9
+2024/11/13 22:54:32 [1] 1 send 0 heartbeat
+2024/11/13 22:54:32 [1] 1 send 2 heartbeat
+2024/11/13 22:54:32 [1] 0 update commitIndex to 9 according to the leader
+2024/11/13 22:54:32 [1] 2 update commitIndex to 9 according to the leader
+2024/11/13 22:54:32 [1] 2 apply the log 9
+2024/11/13 22:54:32 [1] 0 apply the log 9
+2024/11/13 22:54:32 [1] 1 receive a new command,then append at 10
+2024/11/13 22:54:32 [1] 1 send 0 appendEntries index 9
+2024/11/13 22:54:32 [1] 0 successfully append logs from the leader
+2024/11/13 22:54:32 [1] 1 update commitIndex to 10
+2024/11/13 22:54:32 [1] 1 send 2 appendEntries index 9
+2024/11/13 22:54:32 [1] 2 successfully append logs from the leader
+2024/11/13 22:54:32 [1] 1 update commitIndex to 10
+2024/11/13 22:54:32 [1] 1 apply the log 10
+2024/11/13 22:54:32 [1] 1 send 0 heartbeat
+2024/11/13 22:54:32 [1] 0 update commitIndex to 10 according to the leader
+2024/11/13 22:54:32 [1] 1 send 2 heartbeat
+2024/11/13 22:54:32 [1] 2 update commitIndex to 10 according to the leader
+2024/11/13 22:54:32 [1] 0 apply the log 10
+2024/11/13 22:54:32 [1] 2 apply the log 10
+2024/11/13 22:54:32 [1] 1 send 0 heartbeat
+2024/11/13 22:54:32 [1] 1 send 2 heartbeat
+2024/11/13 22:54:32 [1] 1 receive a new command,then append at 11
+2024/11/13 22:54:32 [1] 1 send 0 appendEntries index 10
+2024/11/13 22:54:32 [1] 0 successfully append logs from the leader
+2024/11/13 22:54:32 [1] 1 send 2 appendEntries index 10
+2024/11/13 22:54:32 [1] 1 update commitIndex to 11
+2024/11/13 22:54:32 [1] 2 successfully append logs from the leader
+2024/11/13 22:54:32 [1] 1 update commitIndex to 11
+2024/11/13 22:54:32 [1] 1 apply the log 11
+2024/11/13 22:54:32 [1] 1 send 0 heartbeat
+2024/11/13 22:54:32 [1] 0 update commitIndex to 11 according to the leader
+2024/11/13 22:54:32 [1] 1 send 2 heartbeat
+2024/11/13 22:54:32 [1] 2 update commitIndex to 11 according to the leader
+2024/11/13 22:54:32 [1] 2 apply the log 11
+2024/11/13 22:54:32 [1] 0 apply the log 11
+2024/11/13 22:54:32 [1] 1 send 0 heartbeat
+2024/11/13 22:54:32 [1] 1 send 2 heartbeat
+--- FAIL: TestRPCBytes3B (2.47s)
+    test_test.go:176: too many RPC bytes; got 208682, expected 150000
+FAIL
+exit status 1
+FAIL	6.5840/raft	2.475s
