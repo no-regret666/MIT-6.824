@@ -18,7 +18,6 @@ package raft
 //
 
 import (
-	"log"
 	"sort"
 
 	//	"bytes"
@@ -91,6 +90,8 @@ type Log struct {
 // believes it is the leader.
 func (rf *Raft) GetState() (int, bool) {
 	// Your code here (3A).
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
 	return rf.currentTerm, rf.state == "Leader"
 }
 
@@ -247,7 +248,6 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	}
 	rf.log = append(rf.log, newLog)
 	DPrintf("[%d] %d receive a new command,then append at %d", rf.currentTerm, rf.me, newLog.Index)
-	rf.startAppendEntries(false)
 	return newLog.Index, newLog.Term, true
 }
 
@@ -330,51 +330,43 @@ func (rf *Raft) startElection() {
 }
 
 func (rf *Raft) judgeElectionTimeout() bool {
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
 	return time.Now().Sub(rf.time) > rf.electionTimeout
 }
 
 func (rf *Raft) judgeHeartBeatTimeout() bool {
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
 	return time.Now().Sub(rf.lastHeartBeat) > rf.heartBeatTimeout
 }
 
 func (rf *Raft) updateCommitIndex() {
+	rf.matchIndex[rf.me] = len(rf.log) - 1
 	nums := make([]int, len(rf.peers))
 	copy(nums, rf.matchIndex)
 	sort.Ints(nums)
-	for i := 0; i < len(rf.peers); i++ {
-		log.Printf("%d %d", i, rf.matchIndex[i])
-	}
 	rf.commitIndex = nums[len(nums)/2]
 	DPrintf("[%d] %d update commitIndex to %d", rf.currentTerm, rf.me, rf.commitIndex)
 }
 
 func (rf *Raft) ticker() {
 	for rf.killed() == false {
+		rf.mu.Lock()
 		switch rf.state {
 		case "Leader":
 			if rf.judgeHeartBeatTimeout() {
-				rf.mu.Lock()
 				rf.startAppendEntries(true)
-				rf.mu.Unlock()
 			}
 		case "Follower":
 			fallthrough
 		case "Candidate":
 			if rf.judgeElectionTimeout() {
-				rf.mu.Lock()
 				rf.currentTerm++
 				rf.state = "Candidate"
 				rf.resetTimeout()
 				rf.startElection()
-				rf.mu.Unlock()
 			}
 		}
+		rf.mu.Unlock()
+		time.Sleep(200 * time.Millisecond)
 	}
-	time.Sleep(200 * time.Millisecond)
 }
 
 // 发送日志/心跳
@@ -388,16 +380,15 @@ func (rf *Raft) startAppendEntries(isHeartBeat bool) {
 		if peer == rf.me {
 			continue
 		}
-		//log.Printf("哈哈哈哈哈哈哈哈 peer : %d", peer)
+		lastIndex := rf.nextIndex[peer] - 1
+		args.PrevLogTerm = rf.log[lastIndex].Term
+		args.PrevLogIndex = rf.log[lastIndex].Index
+		args.Log = rf.log[rf.nextIndex[peer]:]
 		go func(peer int) {
+			rf.mu.Lock()
 			if isHeartBeat {
 				DPrintf("[%d] %d send %d heartbeat", rf.currentTerm, rf.me, peer)
 			}
-			rf.mu.Lock()
-			lastIndex := rf.nextIndex[peer] - 1
-			args.PrevLogTerm = rf.log[lastIndex].Term
-			args.PrevLogIndex = rf.log[lastIndex].Index
-			args.Log = rf.log[rf.nextIndex[peer]:]
 			DPrintf("[%d] %d send %d %d logs from %d", rf.currentTerm, rf.me, peer, len(rf.log)-rf.nextIndex[peer], rf.nextIndex[peer])
 			reply := AppendEntriesReply{}
 			if !isHeartBeat && rf.nextIndex[peer] >= len(rf.log) {
@@ -419,6 +410,7 @@ func (rf *Raft) startAppendEntries(isHeartBeat bool) {
 					if reply.Success {
 						rf.nextIndex[peer] = len(rf.log)
 						rf.matchIndex[peer] = len(rf.log) - 1
+						rf.updateCommitIndex()
 						return
 					} else {
 						rf.nextIndex[peer] = max(reply.XIndex, 1)
@@ -428,7 +420,6 @@ func (rf *Raft) startAppendEntries(isHeartBeat bool) {
 			}
 		}(peer)
 	}
-	rf.updateCommitIndex()
 }
 
 func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) bool {

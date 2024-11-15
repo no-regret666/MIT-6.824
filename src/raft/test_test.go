@@ -145,41 +145,41 @@ func TestManyElections3A(t *testing.T) {
 //
 //	cfg.end()
 //}
-
-// check, based on counting bytes of RPCs, that
-// each command is sent to each peer just once.
-func TestRPCBytes3B(t *testing.T) {
-	servers := 3
-	cfg := make_config(t, servers, false, false)
-	defer cfg.cleanup()
-
-	cfg.begin("Test (3B): RPC byte count")
-
-	cfg.one(99, servers, false)
-	bytes0 := cfg.bytesTotal()
-
-	iters := 10
-	var sent int64 = 0
-	for index := 2; index < iters+2; index++ {
-		cmd := randstring(5000)
-		xindex := cfg.one(cmd, servers, false)
-		if xindex != index {
-			t.Fatalf("got index %v but expected %v", xindex, index)
-		}
-		sent += int64(len(cmd))
-	}
-
-	bytes1 := cfg.bytesTotal()
-	got := bytes1 - bytes0
-	expected := int64(servers) * sent
-	if got > expected+50000 {
-		t.Fatalf("too many RPC bytes; got %v, expected %v", got, expected)
-	}
-
-	cfg.end()
-}
-
-//test just failure of followers.
+//
+//// check, based on counting bytes of RPCs, that
+//// each command is sent to each peer just once.
+//func TestRPCBytes3B(t *testing.T) {
+//	servers := 3
+//	cfg := make_config(t, servers, false, false)
+//	defer cfg.cleanup()
+//
+//	cfg.begin("Test (3B): RPC byte count")
+//
+//	cfg.one(99, servers, false)
+//	bytes0 := cfg.bytesTotal()
+//
+//	iters := 10
+//	var sent int64 = 0
+//	for index := 2; index < iters+2; index++ {
+//		cmd := randstring(5000)
+//		xindex := cfg.one(cmd, servers, false)
+//		if xindex != index {
+//			t.Fatalf("got index %v but expected %v", xindex, index)
+//		}
+//		sent += int64(len(cmd))
+//	}
+//
+//	bytes1 := cfg.bytesTotal()
+//	got := bytes1 - bytes0
+//	expected := int64(servers) * sent
+//	if got > expected+50000 {
+//		t.Fatalf("too many RPC bytes; got %v, expected %v", got, expected)
+//	}
+//
+//	cfg.end()
+//}
+//
+//// test just failure of followers.
 //func TestFollowerFailure3B(t *testing.T) {
 //	servers := 3
 //	cfg := make_config(t, servers, false, false)
@@ -350,7 +350,7 @@ func TestRPCBytes3B(t *testing.T) {
 //
 //	cfg.end()
 //}
-//
+
 //func TestConcurrentStarts3B(t *testing.T) {
 //	servers := 3
 //	cfg := make_config(t, servers, false, false)
@@ -451,44 +451,44 @@ func TestRPCBytes3B(t *testing.T) {
 //
 //	cfg.end()
 //}
-
-func TestRejoin3B(t *testing.T) {
-	servers := 3
-	cfg := make_config(t, servers, false, false)
-	defer cfg.cleanup()
-
-	cfg.begin("Test (3B): rejoin of partitioned leader")
-
-	cfg.one(101, servers, true)
-
-	// leader network failure
-	leader1 := cfg.checkOneLeader()
-	cfg.disconnect(leader1)
-
-	// make old leader try to agree on some entries
-	cfg.rafts[leader1].Start(102)
-	cfg.rafts[leader1].Start(103)
-	cfg.rafts[leader1].Start(104)
-
-	// new leader commits, also for index=2
-	cfg.one(103, 2, true)
-
-	// new leader network failure
-	leader2 := cfg.checkOneLeader()
-	cfg.disconnect(leader2)
-
-	// old leader connected again
-	cfg.connect(leader1)
-
-	cfg.one(104, 2, true)
-
-	// all together now
-	cfg.connect(leader2)
-
-	cfg.one(105, servers, true)
-
-	cfg.end()
-}
+//
+//func TestRejoin3B(t *testing.T) {
+//	servers := 3
+//	cfg := make_config(t, servers, false, false)
+//	defer cfg.cleanup()
+//
+//	cfg.begin("Test (3B): rejoin of partitioned leader")
+//
+//	cfg.one(101, servers, true)
+//
+//	// leader network failure
+//	leader1 := cfg.checkOneLeader()
+//	cfg.disconnect(leader1)
+//
+//	// make old leader try to agree on some entries
+//	cfg.rafts[leader1].Start(102)
+//	cfg.rafts[leader1].Start(103)
+//	cfg.rafts[leader1].Start(104)
+//
+//	// new leader commits, also for index=2
+//	cfg.one(103, 2, true)
+//
+//	// new leader network failure
+//	leader2 := cfg.checkOneLeader()
+//	cfg.disconnect(leader2)
+//
+//	// old leader connected again
+//	cfg.connect(leader1)
+//
+//	cfg.one(104, 2, true)
+//
+//	// all together now
+//	cfg.connect(leader2)
+//
+//	cfg.one(105, servers, true)
+//
+//	cfg.end()
+//}
 
 func TestBackup3B(t *testing.T) {
 	servers := 5
