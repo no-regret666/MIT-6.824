@@ -18,6 +18,7 @@ package raft
 //
 
 import (
+	"log"
 	"sort"
 
 	//	"bytes"
@@ -342,9 +343,12 @@ func (rf *Raft) judgeHeartBeatTimeout() bool {
 
 func (rf *Raft) updateCommitIndex() {
 	nums := make([]int, len(rf.peers))
-	nums = rf.matchIndex
+	copy(nums, rf.matchIndex)
 	sort.Ints(nums)
-	rf.commitIndex = nums[len(nums)/2+1]
+	for i := 0; i < len(rf.peers); i++ {
+		log.Printf("%d %d", i, rf.matchIndex[i])
+	}
+	rf.commitIndex = nums[len(nums)/2]
 	DPrintf("[%d] %d update commitIndex to %d", rf.currentTerm, rf.me, rf.commitIndex)
 }
 
@@ -384,18 +388,23 @@ func (rf *Raft) startAppendEntries(isHeartBeat bool) {
 		if peer == rf.me {
 			continue
 		}
+		//log.Printf("哈哈哈哈哈哈哈哈 peer : %d", peer)
 		go func(peer int) {
 			if isHeartBeat {
 				DPrintf("[%d] %d send %d heartbeat", rf.currentTerm, rf.me, peer)
 			}
-			if rf.nextIndex[peer] < len(rf.log) {
-				lastIndex := rf.nextIndex[peer] - 1
-				args.PrevLogTerm = rf.log[lastIndex].Term
-				args.PrevLogIndex = rf.log[lastIndex].Index
-				args.Log = rf.log[lastIndex:]
-				DPrintf("[%d] %d send %d appendEntries index %d", rf.currentTerm, rf.me, peer, lastIndex)
-			}
+			rf.mu.Lock()
+			lastIndex := rf.nextIndex[peer] - 1
+			args.PrevLogTerm = rf.log[lastIndex].Term
+			args.PrevLogIndex = rf.log[lastIndex].Index
+			args.Log = rf.log[rf.nextIndex[peer]:]
+			DPrintf("[%d] %d send %d %d logs from %d", rf.currentTerm, rf.me, peer, len(rf.log)-rf.nextIndex[peer], rf.nextIndex[peer])
 			reply := AppendEntriesReply{}
+			if !isHeartBeat && rf.nextIndex[peer] >= len(rf.log) {
+				rf.mu.Unlock()
+				return
+			}
+			rf.mu.Unlock()
 			if rf.sendAppendEntries(peer, &args, &reply) {
 				rf.mu.Lock()
 				defer rf.mu.Unlock()
@@ -410,7 +419,6 @@ func (rf *Raft) startAppendEntries(isHeartBeat bool) {
 					if reply.Success {
 						rf.nextIndex[peer] = len(rf.log)
 						rf.matchIndex[peer] = len(rf.log) - 1
-						rf.updateCommitIndex()
 						return
 					} else {
 						rf.nextIndex[peer] = max(reply.XIndex, 1)
@@ -420,7 +428,7 @@ func (rf *Raft) startAppendEntries(isHeartBeat bool) {
 			}
 		}(peer)
 	}
-
+	rf.updateCommitIndex()
 }
 
 func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
@@ -475,7 +483,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs,
 			DPrintf("[%d] %d 's logs conflict with the leader's", rf.currentTerm, rf.me)
 			return
 		}
-		rf.log = append(rf.log[:args.PrevLogIndex], args.Log...)
+		rf.log = append(rf.log[:args.PrevLogIndex+1], args.Log...)
 		DPrintf("[%d] %d successfully append logs to %d from the leader %d", rf.currentTerm, rf.me, len(rf.log)-1, args.LeaderId)
 	}
 	if args.LeaderCommit > rf.commitIndex {
@@ -488,29 +496,23 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs,
 func (rf *Raft) applyCommited() {
 	for rf.killed() == false {
 		rf.mu.Lock()
-		initialApplied := rf.lastApplied
-		DPrintf("哈哈哈哈哈哈哈%d %d", rf.me, initialApplied)
 		for rf.lastApplied < rf.commitIndex {
-			//rf.lastApplied++
-			//if rf.log[rf.lastApplied].Term != rf.currentTerm {
-			//	DPrintf("[%d] log %d 's term is different from currentTerm,can't be applied", rf.currentTerm, rf.lastApplied)
-			//	continue
-			//}
-			//DPrintf("嘻嘻嘻嘻嘻嘻嘻嘻%d %d", rf.me, initialApplied)
-			//for i := initialApplied + 1; i <= rf.lastApplied; i++ {
-			//	command := rf.log[i].Command
-			//	commandIndex := i
-			//	msg := ApplyMsg{
-			//		CommandValid: true,
-			//		Command:      command,
-			//		CommandIndex: commandIndex,
-			//	}
-			//	DPrintf("[%d] %d apply the log %d %v", rf.currentTerm, rf.me, commandIndex, command)
-			//	rf.applyCh <- msg
-			//}
-
+			if rf.log[rf.commitIndex].Term != rf.currentTerm {
+				break
+			}
+			for i := rf.lastApplied + 1; i <= rf.commitIndex; i++ {
+				command := rf.log[i].Command
+				commandIndex := i
+				msg := ApplyMsg{
+					CommandValid: true,
+					Command:      command,
+					CommandIndex: commandIndex,
+				}
+				DPrintf("[%d] %d apply the log %d %v", rf.currentTerm, rf.me, commandIndex, command)
+				rf.applyCh <- msg
+				rf.lastApplied++
+			}
 		}
-
 		rf.mu.Unlock()
 		time.Sleep(200 * time.Millisecond)
 	}
