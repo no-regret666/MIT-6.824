@@ -55,7 +55,7 @@ type ApplyMsg struct {
 
 // A Go object implementing a single Raft peer.
 type Raft struct {
-	mu        sync.Mutex          // Lock to protect shared access to this peer's state
+	mu        sync.RWMutex        // Lock to protect shared access to this peer's state
 	peers     []*labrpc.ClientEnd // RPC end points of all peers
 	persister *Persister          // Object to hold this peer's persisted state
 	me        int                 // this peer's index into peers[]
@@ -90,8 +90,8 @@ type Log struct {
 // believes it is the leader.
 func (rf *Raft) GetState() (int, bool) {
 	// Your code here (3A).
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
+	rf.mu.RLock()
+	defer rf.mu.RUnlock()
 	return rf.currentTerm, rf.state == "Leader"
 }
 
@@ -248,6 +248,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	}
 	rf.log = append(rf.log, newLog)
 	DPrintf("[%d] %d receive a new command,then append at %d", rf.currentTerm, rf.me, newLog.Index)
+	rf.startAppendEntries(false)
 	return newLog.Index, newLog.Term, true
 }
 
@@ -352,6 +353,7 @@ func (rf *Raft) ticker() {
 		switch rf.state {
 		case "Leader":
 			if rf.judgeHeartBeatTimeout() {
+				rf.lastHeartBeat = time.Now()
 				rf.startAppendEntries(true)
 			}
 		case "Follower":
@@ -371,58 +373,57 @@ func (rf *Raft) ticker() {
 
 // 发送日志/心跳
 func (rf *Raft) startAppendEntries(isHeartBeat bool) {
-	rf.lastHeartBeat = time.Now()
-	args := AppendEntriesArgs{}
-	args.Term = rf.currentTerm
-	args.LeaderId = rf.me
-	args.LeaderCommit = rf.commitIndex
 	for peer := range rf.peers {
 		if peer == rf.me {
 			continue
 		}
-		lastIndex := rf.nextIndex[peer] - 1
-		args.PrevLogTerm = rf.log[lastIndex].Term
-		args.PrevLogIndex = rf.log[lastIndex].Index
-		args.Log = rf.log[rf.nextIndex[peer]:]
-		go func(peer int) {
-			rf.mu.Lock()
-			if isHeartBeat {
-				DPrintf("[%d] %d send %d heartbeat", rf.currentTerm, rf.me, peer)
-			}
-			DPrintf("[%d] %d send %d %d logs from %d", rf.currentTerm, rf.me, peer, len(rf.log)-rf.nextIndex[peer], rf.nextIndex[peer])
-			reply := AppendEntriesReply{}
-			if !isHeartBeat && rf.nextIndex[peer] >= len(rf.log) {
-				rf.mu.Unlock()
-				return
-			}
-			rf.mu.Unlock()
-			if rf.sendAppendEntries(peer, &args, &reply) {
-				rf.mu.Lock()
-				defer rf.mu.Unlock()
-				if rf.currentTerm == args.Term && rf.state == "Leader" {
-					if reply.Term > rf.currentTerm {
-						rf.state = "Follower"
-						rf.currentTerm = reply.Term
-						rf.votedFor = -1
-						DPrintf("[%d] a new leader happen,%d become follower", rf.currentTerm, rf.me)
-						return
-					}
-					if reply.Success {
-						rf.nextIndex[peer] = len(rf.log)
-						rf.matchIndex[peer] = len(rf.log) - 1
-						rf.updateCommitIndex()
-						return
-					} else {
-						rf.nextIndex[peer] = max(reply.XIndex, 1)
-						rf.startAppendEntries(false)
-					}
-				}
-			}
-		}(peer)
+		go rf.sendAppendEntries(peer, isHeartBeat)
 	}
 }
 
-func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
+func (rf *Raft) sendAppendEntries(peer int, isHeartBeat bool) {
+	rf.mu.RLock()
+	if rf.state != "Leader" {
+		rf.mu.RUnlock()
+		return
+	}
+	args := AppendEntriesArgs{}
+	args.Term = rf.currentTerm
+	args.LeaderId = rf.me
+	args.LeaderCommit = rf.commitIndex
+	lastIndex := rf.nextIndex[peer] - 1
+	args.PrevLogTerm = rf.log[lastIndex].Term
+	args.PrevLogIndex = rf.log[lastIndex].Index
+	args.Log = rf.log[rf.nextIndex[peer]:]
+	if isHeartBeat {
+		DPrintf("[%d] %d send %d heartbeat", rf.currentTerm, rf.me, peer)
+	}
+	DPrintf("[%d] %d send %d %d logs from %d", rf.currentTerm, rf.me, peer, len(rf.log)-rf.nextIndex[peer], rf.nextIndex[peer])
+	rf.mu.RUnlock()
+	reply := AppendEntriesReply{}
+	if rf.callAppendEntries(peer, &args, &reply) {
+		rf.mu.Lock()
+		defer rf.mu.Unlock()
+		if reply.Term > rf.currentTerm {
+			rf.state = "Follower"
+			rf.currentTerm = reply.Term
+			rf.votedFor = -1
+			DPrintf("[%d] a new leader happen,%d become follower", rf.currentTerm, rf.me)
+			return
+		}
+		if reply.Success {
+			rf.nextIndex[peer] = args.PrevLogIndex + len(args.Log) + 1
+			rf.matchIndex[peer] = args.PrevLogIndex + len(args.Log)
+			rf.updateCommitIndex()
+			return
+		} else {
+			rf.nextIndex[peer] = max(reply.XIndex, 1)
+			rf.startAppendEntries(false)
+		}
+	}
+}
+
+func (rf *Raft) callAppendEntries(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
 	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
 	return ok
 }
