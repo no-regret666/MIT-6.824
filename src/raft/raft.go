@@ -78,6 +78,8 @@ type Raft struct {
 	lastApplied      int           //已经被应用到状态机的最高的日志条目的索引
 	nextIndex        []int         //对于每一台服务器，发送到该服务器的下一个日志条目的索引
 	matchIndex       []int         //对于每一台服务器，已知的已经复制到该服务器的最高日志条目的索引
+	applyCond        *sync.Cond
+	appendCond       []*sync.Cond
 }
 
 type Log struct {
@@ -247,7 +249,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 		Command: command,
 	}
 	rf.log = append(rf.log, newLog)
-	DPrintf("[%d] %d receive a new command,then append at %d", rf.currentTerm, rf.me, newLog.Index)
+	DPrintf("[%d] %d receive a new command %v,then append at %d", rf.currentTerm, rf.me, command, newLog.Index)
 	rf.startAppendEntries(false)
 	return newLog.Index, newLog.Term, true
 }
@@ -339,11 +341,15 @@ func (rf *Raft) judgeHeartBeatTimeout() bool {
 }
 
 func (rf *Raft) updateCommitIndex() {
+	prevCommitIndex := rf.commitIndex
 	rf.matchIndex[rf.me] = len(rf.log) - 1
 	nums := make([]int, len(rf.peers))
 	copy(nums, rf.matchIndex)
 	sort.Ints(nums)
 	rf.commitIndex = nums[len(nums)/2]
+	if rf.commitIndex > prevCommitIndex {
+		rf.applyCond.Signal()
+	}
 	DPrintf("[%d] %d update commitIndex to %d", rf.currentTerm, rf.me, rf.commitIndex)
 }
 
@@ -377,7 +383,11 @@ func (rf *Raft) startAppendEntries(isHeartBeat bool) {
 		if peer == rf.me {
 			continue
 		}
-		go rf.sendAppendEntries(peer, isHeartBeat)
+		if isHeartBeat {
+			go rf.sendAppendEntries(peer, isHeartBeat)
+		} else {
+			rf.appendCond[peer].Signal()
+		}
 	}
 }
 
@@ -426,6 +436,24 @@ func (rf *Raft) sendAppendEntries(peer int, isHeartBeat bool) {
 func (rf *Raft) callAppendEntries(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
 	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
 	return ok
+}
+
+// leader判断follower是否
+func (rf *Raft) appender(server int) {
+	rf.appendCond[server].L.Lock()
+	defer rf.appendCond[server].L.Unlock()
+	for rf.killed() == false {
+		if !rf.needAppend(server) {
+			rf.appendCond[server].Wait()
+		}
+		go rf.sendAppendEntries(server, false)
+	}
+}
+
+func (rf *Raft) needAppend(server int) bool {
+	rf.mu.RLock()
+	defer rf.mu.RUnlock()
+	return rf.state == "leader" && rf.matchIndex[server] < len(rf.log)
 }
 
 type AppendEntriesArgs struct {
@@ -478,9 +506,13 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs,
 		rf.log = append(rf.log[:args.PrevLogIndex+1], args.Log...)
 		DPrintf("[%d] %d successfully append logs to %d from the leader %d", rf.currentTerm, rf.me, len(rf.log)-1, args.LeaderId)
 	}
+	prevCommitIndex := rf.commitIndex
 	if args.LeaderCommit > rf.commitIndex {
 		rf.commitIndex = min(args.LeaderCommit, len(rf.log)-1)
 		DPrintf("[%d] %d update commitIndex to %d according to the leader %d", rf.currentTerm, rf.me, rf.commitIndex, args.LeaderId)
+	}
+	if rf.commitIndex > prevCommitIndex {
+		rf.applyCond.Signal()
 	}
 	reply.Success = true
 }
@@ -488,25 +520,24 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs,
 func (rf *Raft) applyCommited() {
 	for rf.killed() == false {
 		rf.mu.Lock()
-		for rf.lastApplied < rf.commitIndex {
-			if rf.log[rf.commitIndex].Term != rf.currentTerm {
-				break
-			}
-			for i := rf.lastApplied + 1; i <= rf.commitIndex; i++ {
-				command := rf.log[i].Command
-				commandIndex := i
-				msg := ApplyMsg{
-					CommandValid: true,
-					Command:      command,
-					CommandIndex: commandIndex,
-				}
-				DPrintf("[%d] %d apply the log %d %v", rf.currentTerm, rf.me, commandIndex, command)
-				rf.applyCh <- msg
-				rf.lastApplied++
-			}
+		for rf.lastApplied >= rf.commitIndex {
+			rf.applyCond.Wait()
 		}
+		if rf.log[rf.commitIndex].Term != rf.currentTerm {
+			rf.mu.Unlock()
+			continue
+		}
+		rf.lastApplied++
+		index := rf.lastApplied
+		command := rf.log[index].Command
+		msg := ApplyMsg{
+			CommandValid: true,
+			Command:      command,
+			CommandIndex: index,
+		}
+		DPrintf("[%d] %d apply the log %d %v", rf.currentTerm, rf.me, index, command)
+		rf.applyCh <- msg
 		rf.mu.Unlock()
-		time.Sleep(200 * time.Millisecond)
 	}
 }
 
@@ -539,12 +570,18 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.resetTimeout()
 	rf.heartBeatTimeout = heartBeatTimeout
 	rf.applyCh = applyCh
+	rf.applyCond = sync.NewCond(&rf.mu)
+	rf.appendCond = make([]*sync.Cond, len(rf.peers))
 
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
 	for i := 0; i < len(peers); i++ {
 		rf.nextIndex[i] = len(rf.log)
 		rf.matchIndex[i] = 0
+		if i != rf.me {
+			rf.appendCond[i] = sync.NewCond(&sync.Mutex{})
+			go rf.appender(i)
+		}
 	}
 
 	// start ticker goroutine to start elections
