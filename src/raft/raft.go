@@ -18,6 +18,9 @@ package raft
 //
 
 import (
+	"6.5840/labgob"
+	"bytes"
+	"log"
 	"sort"
 
 	//	"bytes"
@@ -108,11 +111,18 @@ func (rf *Raft) persist() {
 	// Your code here (3C).
 	// Example:
 	// w := new(bytes.Buffer)
-	// e := labgob.NewEncoder(w)
+	//e := labgob.NewEncoder(w)
 	// e.Encode(rf.xxx)
 	// e.Encode(rf.yyy)
 	// raftstate := w.Bytes()
 	// rf.persister.Save(raftstate, nil)
+	w := new(bytes.Buffer)
+	e := labgob.NewEncoder(w)
+	if e.Encode(rf.currentTerm) != nil || e.Encode(rf.votedFor) != nil || e.Encode(rf.log) != nil {
+		log.Printf("persist failed for term %d: %v", rf.currentTerm, e)
+	}
+	raftstate := w.Bytes()
+	rf.persister.Save(raftstate, nil)
 }
 
 // restore previously persisted state.
@@ -133,6 +143,18 @@ func (rf *Raft) readPersist(data []byte) {
 	//   rf.xxx = xxx
 	//  rf.yyy = yyy
 	// }
+	r := bytes.NewBuffer(data)
+	d := labgob.NewDecoder(r)
+	var tmpCurrentTerm int
+	var tmpVotedFor int
+	var tmpLog []Log
+	if d.Decode(&tmpCurrentTerm) != nil || d.Decode(&tmpVotedFor) != nil || d.Decode(&tmpLog) != nil {
+		log.Printf("readPersist failed for term %d: %v", rf.currentTerm, d)
+	} else {
+		rf.currentTerm = tmpCurrentTerm
+		rf.votedFor = tmpVotedFor
+		rf.log = tmpLog
+	}
 }
 
 // the service says it has created a snapshot that has
@@ -182,6 +204,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		if args.LastLogTerm < lastLog.Term || (args.LastLogTerm == lastLog.Term && args.LastLogIndex < lastLog.Index) {
 			reply.Term = rf.currentTerm
 			reply.VoteGranted = false
+			rf.persist()
 			return
 		}
 	}
@@ -190,6 +213,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	reply.Term = rf.currentTerm
 	reply.VoteGranted = true
 	DPrintf("[%d] %d agree %d to become leader", rf.currentTerm, rf.me, rf.votedFor)
+	rf.persist()
 }
 
 // example code to send a RequestVote RPC to a server.
@@ -249,6 +273,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 		Command: command,
 	}
 	rf.log = append(rf.log, newLog)
+	rf.persist()
 	DPrintf("[%d] %d receive a new command %v,then append at %d", rf.currentTerm, rf.me, command, newLog.Index)
 	rf.startAppendEntries(false)
 	return newLog.Index, newLog.Term, true
@@ -322,6 +347,7 @@ func (rf *Raft) startElection() {
 					rf.currentTerm = reply.Term
 					rf.votedFor = -1
 					DPrintf("[%d] %d fail to be leader", rf.currentTerm, rf.me)
+					rf.persist()
 					return
 				}
 			}
@@ -370,6 +396,7 @@ func (rf *Raft) ticker() {
 				rf.state = "Candidate"
 				rf.resetTimeout()
 				rf.startElection()
+				rf.persist()
 			}
 		}
 		rf.mu.Unlock()
@@ -418,10 +445,11 @@ func (rf *Raft) sendAppendEntries(peer int, isHeartBeat bool) {
 			rf.state = "Follower"
 			rf.currentTerm = reply.Term
 			rf.votedFor = -1
+			rf.persist()
 			DPrintf("[%d] a new leader happen,%d become follower", rf.currentTerm, rf.me)
 			return
 		}
-		if reply.Success {
+		if reply.Success == "true" {
 			rf.nextIndex[peer] = args.PrevLogIndex + len(args.Log) + 1
 			rf.matchIndex[peer] = args.PrevLogIndex + len(args.Log)
 			rf.updateCommitIndex()
@@ -467,7 +495,7 @@ type AppendEntriesArgs struct {
 
 type AppendEntriesReply struct {
 	Term    int
-	Success bool
+	Success string
 	XTerm   int //冲突Log任期号
 	XIndex  int //对应任期号为XTerm的第一条Log的槽位号/下一条日志索引
 }
@@ -477,11 +505,18 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs,
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 	reply.Term = rf.currentTerm
-	reply.Success = false
+	reply.Success = "false"
 	reply.XTerm = -1
 	reply.XIndex = args.PrevLogIndex
 	if args.Term < rf.currentTerm {
 		return
+	}
+	//lab3C : 判断是否是无效请求
+	if len(args.Log) > 0 {
+		if len(rf.log)-1 >= args.Log[len(args.Log)-1].Index {
+			reply.Success = "pass"
+			return
+		}
 	}
 	if args.Term > rf.currentTerm {
 		rf.currentTerm = args.Term
@@ -492,6 +527,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs,
 	if len(args.Log) > 0 {
 		if args.PrevLogIndex >= len(rf.log) {
 			reply.XIndex = len(rf.log)
+			rf.persist()
 			DPrintf("[%d] %d 's logs are less than the leader's", rf.currentTerm, rf.me)
 			return
 		}
@@ -500,6 +536,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs,
 			for reply.XIndex > 0 && rf.log[reply.XIndex-1].Term == reply.XTerm {
 				reply.XIndex--
 			}
+			rf.persist()
 			DPrintf("[%d] %d 's logs conflict with the leader's", rf.currentTerm, rf.me)
 			return
 		}
@@ -514,7 +551,8 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs,
 	if rf.commitIndex > prevCommitIndex {
 		rf.applyCond.Signal()
 	}
-	reply.Success = true
+	reply.Success = "true"
+	rf.persist()
 }
 
 func (rf *Raft) applyCommited() {
@@ -522,6 +560,9 @@ func (rf *Raft) applyCommited() {
 		rf.mu.Lock()
 		for rf.lastApplied >= rf.commitIndex {
 			rf.applyCond.Wait()
+		}
+		if rf.commitIndex > len(rf.log)-1 {
+			log.Printf("%d %d %d", rf.me, rf.commitIndex, len(rf.log))
 		}
 		if rf.log[rf.commitIndex].Term != rf.currentTerm {
 			rf.mu.Unlock()

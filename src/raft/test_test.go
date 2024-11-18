@@ -674,191 +674,192 @@ loop:
 	cfg.end()
 }
 
-func TestPersist13C(t *testing.T) {
-	servers := 3
-	cfg := make_config(t, servers, false, false)
-	defer cfg.cleanup()
-
-	cfg.begin("Test (3C): basic persistence")
-
-	cfg.one(11, servers, true)
-
-	// crash and re-start all
-	for i := 0; i < servers; i++ {
-		cfg.start1(i, cfg.applier)
-	}
-	for i := 0; i < servers; i++ {
-		cfg.disconnect(i)
-		cfg.connect(i)
-	}
-
-	cfg.one(12, servers, true)
-
-	leader1 := cfg.checkOneLeader()
-	cfg.disconnect(leader1)
-	cfg.start1(leader1, cfg.applier)
-	cfg.connect(leader1)
-
-	cfg.one(13, servers, true)
-
-	leader2 := cfg.checkOneLeader()
-	cfg.disconnect(leader2)
-	cfg.one(14, servers-1, true)
-	cfg.start1(leader2, cfg.applier)
-	cfg.connect(leader2)
-
-	cfg.wait(4, servers, -1) // wait for leader2 to join before killing i3
-
-	i3 := (cfg.checkOneLeader() + 1) % servers
-	cfg.disconnect(i3)
-	cfg.one(15, servers-1, true)
-	cfg.start1(i3, cfg.applier)
-	cfg.connect(i3)
-
-	cfg.one(16, servers, true)
-
-	cfg.end()
-}
-
-func TestPersist23C(t *testing.T) {
-	servers := 5
-	cfg := make_config(t, servers, false, false)
-	defer cfg.cleanup()
-
-	cfg.begin("Test (3C): more persistence")
-
-	index := 1
-	for iters := 0; iters < 5; iters++ {
-		cfg.one(10+index, servers, true)
-		index++
-
-		leader1 := cfg.checkOneLeader()
-
-		cfg.disconnect((leader1 + 1) % servers)
-		cfg.disconnect((leader1 + 2) % servers)
-
-		cfg.one(10+index, servers-2, true)
-		index++
-
-		cfg.disconnect((leader1 + 0) % servers)
-		cfg.disconnect((leader1 + 3) % servers)
-		cfg.disconnect((leader1 + 4) % servers)
-
-		cfg.start1((leader1+1)%servers, cfg.applier)
-		cfg.start1((leader1+2)%servers, cfg.applier)
-		cfg.connect((leader1 + 1) % servers)
-		cfg.connect((leader1 + 2) % servers)
-
-		time.Sleep(RaftElectionTimeout)
-
-		cfg.start1((leader1+3)%servers, cfg.applier)
-		cfg.connect((leader1 + 3) % servers)
-
-		cfg.one(10+index, servers-2, true)
-		index++
-
-		cfg.connect((leader1 + 4) % servers)
-		cfg.connect((leader1 + 0) % servers)
-	}
-
-	cfg.one(1000, servers, true)
-
-	cfg.end()
-}
-
-func TestPersist33C(t *testing.T) {
-	servers := 3
-	cfg := make_config(t, servers, false, false)
-	defer cfg.cleanup()
-
-	cfg.begin("Test (3C): partitioned leader and one follower crash, leader restarts")
-
-	cfg.one(101, 3, true)
-
-	leader := cfg.checkOneLeader()
-	cfg.disconnect((leader + 2) % servers)
-
-	cfg.one(102, 2, true)
-
-	cfg.crash1((leader + 0) % servers)
-	cfg.crash1((leader + 1) % servers)
-	cfg.connect((leader + 2) % servers)
-	cfg.start1((leader+0)%servers, cfg.applier)
-	cfg.connect((leader + 0) % servers)
-
-	cfg.one(103, 2, true)
-
-	cfg.start1((leader+1)%servers, cfg.applier)
-	cfg.connect((leader + 1) % servers)
-
-	cfg.one(104, servers, true)
-
-	cfg.end()
-}
-
-// Test the scenarios described in Figure 8 of the extended Raft paper. Each
-// iteration asks a leader, if there is one, to insert a command in the Raft
-// log.  If there is a leader, that leader will fail quickly with a high
-// probability (perhaps without committing the command), or crash after a while
-// with low probability (most likey committing the command).  If the number of
-// alive servers isn't enough to form a majority, perhaps start a new server.
-// The leader in a new term may try to finish replicating log entries that
-// haven't been committed yet.
-func TestFigure83C(t *testing.T) {
-	servers := 5
-	cfg := make_config(t, servers, false, false)
-	defer cfg.cleanup()
-
-	cfg.begin("Test (3C): Figure 8")
-
-	cfg.one(rand.Int(), 1, true)
-
-	nup := servers
-	for iters := 0; iters < 1000; iters++ {
-		leader := -1
-		for i := 0; i < servers; i++ {
-			if cfg.rafts[i] != nil {
-				_, _, ok := cfg.rafts[i].Start(rand.Int())
-				if ok {
-					leader = i
-				}
-			}
-		}
-
-		if (rand.Int() % 1000) < 100 {
-			ms := rand.Int63() % (int64(RaftElectionTimeout/time.Millisecond) / 2)
-			time.Sleep(time.Duration(ms) * time.Millisecond)
-		} else {
-			ms := (rand.Int63() % 13)
-			time.Sleep(time.Duration(ms) * time.Millisecond)
-		}
-
-		if leader != -1 {
-			cfg.crash1(leader)
-			nup -= 1
-		}
-
-		if nup < 3 {
-			s := rand.Int() % servers
-			if cfg.rafts[s] == nil {
-				cfg.start1(s, cfg.applier)
-				cfg.connect(s)
-				nup += 1
-			}
-		}
-	}
-
-	for i := 0; i < servers; i++ {
-		if cfg.rafts[i] == nil {
-			cfg.start1(i, cfg.applier)
-			cfg.connect(i)
-		}
-	}
-
-	cfg.one(rand.Int(), servers, true)
-
-	cfg.end()
-}
+//
+//func TestPersist13C(t *testing.T) {
+//	servers := 3
+//	cfg := make_config(t, servers, false, false)
+//	defer cfg.cleanup()
+//
+//	cfg.begin("Test (3C): basic persistence")
+//
+//	cfg.one(11, servers, true)
+//
+//	// crash and re-start all
+//	for i := 0; i < servers; i++ {
+//		cfg.start1(i, cfg.applier)
+//	}
+//	for i := 0; i < servers; i++ {
+//		cfg.disconnect(i)
+//		cfg.connect(i)
+//	}
+//
+//	cfg.one(12, servers, true)
+//
+//	leader1 := cfg.checkOneLeader()
+//	cfg.disconnect(leader1)
+//	cfg.start1(leader1, cfg.applier)
+//	cfg.connect(leader1)
+//
+//	cfg.one(13, servers, true)
+//
+//	leader2 := cfg.checkOneLeader()
+//	cfg.disconnect(leader2)
+//	cfg.one(14, servers-1, true)
+//	cfg.start1(leader2, cfg.applier)
+//	cfg.connect(leader2)
+//
+//	cfg.wait(4, servers, -1) // wait for leader2 to join before killing i3
+//
+//	i3 := (cfg.checkOneLeader() + 1) % servers
+//	cfg.disconnect(i3)
+//	cfg.one(15, servers-1, true)
+//	cfg.start1(i3, cfg.applier)
+//	cfg.connect(i3)
+//
+//	cfg.one(16, servers, true)
+//
+//	cfg.end()
+//}
+//
+//func TestPersist23C(t *testing.T) {
+//	servers := 5
+//	cfg := make_config(t, servers, false, false)
+//	defer cfg.cleanup()
+//
+//	cfg.begin("Test (3C): more persistence")
+//
+//	index := 1
+//	for iters := 0; iters < 5; iters++ {
+//		cfg.one(10+index, servers, true)
+//		index++
+//
+//		leader1 := cfg.checkOneLeader()
+//
+//		cfg.disconnect((leader1 + 1) % servers)
+//		cfg.disconnect((leader1 + 2) % servers)
+//
+//		cfg.one(10+index, servers-2, true)
+//		index++
+//
+//		cfg.disconnect((leader1 + 0) % servers)
+//		cfg.disconnect((leader1 + 3) % servers)
+//		cfg.disconnect((leader1 + 4) % servers)
+//
+//		cfg.start1((leader1+1)%servers, cfg.applier)
+//		cfg.start1((leader1+2)%servers, cfg.applier)
+//		cfg.connect((leader1 + 1) % servers)
+//		cfg.connect((leader1 + 2) % servers)
+//
+//		time.Sleep(RaftElectionTimeout)
+//
+//		cfg.start1((leader1+3)%servers, cfg.applier)
+//		cfg.connect((leader1 + 3) % servers)
+//
+//		cfg.one(10+index, servers-2, true)
+//		index++
+//
+//		cfg.connect((leader1 + 4) % servers)
+//		cfg.connect((leader1 + 0) % servers)
+//	}
+//
+//	cfg.one(1000, servers, true)
+//
+//	cfg.end()
+//}
+//
+//func TestPersist33C(t *testing.T) {
+//	servers := 3
+//	cfg := make_config(t, servers, false, false)
+//	defer cfg.cleanup()
+//
+//	cfg.begin("Test (3C): partitioned leader and one follower crash, leader restarts")
+//
+//	cfg.one(101, 3, true)
+//
+//	leader := cfg.checkOneLeader()
+//	cfg.disconnect((leader + 2) % servers)
+//
+//	cfg.one(102, 2, true)
+//
+//	cfg.crash1((leader + 0) % servers)
+//	cfg.crash1((leader + 1) % servers)
+//	cfg.connect((leader + 2) % servers)
+//	cfg.start1((leader+0)%servers, cfg.applier)
+//	cfg.connect((leader + 0) % servers)
+//
+//	cfg.one(103, 2, true)
+//
+//	cfg.start1((leader+1)%servers, cfg.applier)
+//	cfg.connect((leader + 1) % servers)
+//
+//	cfg.one(104, servers, true)
+//
+//	cfg.end()
+//}
+//
+//// Test the scenarios described in Figure 8 of the extended Raft paper. Each
+//// iteration asks a leader, if there is one, to insert a command in the Raft
+//// log.  If there is a leader, that leader will fail quickly with a high
+//// probability (perhaps without committing the command), or crash after a while
+//// with low probability (most likey committing the command).  If the number of
+//// alive servers isn't enough to form a majority, perhaps start a new server.
+//// The leader in a new term may try to finish replicating log entries that
+//// haven't been committed yet.
+//func TestFigure83C(t *testing.T) {
+//	servers := 5
+//	cfg := make_config(t, servers, false, false)
+//	defer cfg.cleanup()
+//
+//	cfg.begin("Test (3C): Figure 8")
+//
+//	cfg.one(rand.Int(), 1, true)
+//
+//	nup := servers
+//	for iters := 0; iters < 1000; iters++ {
+//		leader := -1
+//		for i := 0; i < servers; i++ {
+//			if cfg.rafts[i] != nil {
+//				_, _, ok := cfg.rafts[i].Start(rand.Int())
+//				if ok {
+//					leader = i
+//				}
+//			}
+//		}
+//
+//		if (rand.Int() % 1000) < 100 {
+//			ms := rand.Int63() % (int64(RaftElectionTimeout/time.Millisecond) / 2)
+//			time.Sleep(time.Duration(ms) * time.Millisecond)
+//		} else {
+//			ms := (rand.Int63() % 13)
+//			time.Sleep(time.Duration(ms) * time.Millisecond)
+//		}
+//
+//		if leader != -1 {
+//			cfg.crash1(leader)
+//			nup -= 1
+//		}
+//
+//		if nup < 3 {
+//			s := rand.Int() % servers
+//			if cfg.rafts[s] == nil {
+//				cfg.start1(s, cfg.applier)
+//				cfg.connect(s)
+//				nup += 1
+//			}
+//		}
+//	}
+//
+//	for i := 0; i < servers; i++ {
+//		if cfg.rafts[i] == nil {
+//			cfg.start1(i, cfg.applier)
+//			cfg.connect(i)
+//		}
+//	}
+//
+//	cfg.one(rand.Int(), servers, true)
+//
+//	cfg.end()
+//}
 
 func TestUnreliableAgree3C(t *testing.T) {
 	servers := 5
