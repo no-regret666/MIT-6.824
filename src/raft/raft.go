@@ -69,7 +69,7 @@ type Raft struct {
 	// state a Raft server must maintain.
 	currentTerm int   //当前任期
 	votedFor    int   //当前任期投票对象
-	log         []Log //日志
+	log         []Log //日志,第一条为{Term:快照任期，Index:快照索引，Cmd:nil}
 
 	electionTimeout  time.Duration //选举超时时间
 	time             time.Time     //开始计算选举超时的时间
@@ -122,15 +122,16 @@ func (rf *Raft) persist() {
 	if e.Encode(rf.currentTerm) != nil || e.Encode(rf.votedFor) != nil || e.Encode(rf.log) != nil {
 		log.Printf("persist failed for term %d: %v", rf.currentTerm, e)
 	}
-	raftstate := w.Bytes()
-	rf.persister.Save(raftstate, nil)
+	raftState := w.Bytes()
+	if rf.log[0].Index > 0 {
+		rf.persister.Save(raftState, rf.snapshot)
+	} else {
+		rf.persister.Save(raftState, nil)
+	}
 }
 
 // restore previously persisted state.
-func (rf *Raft) readPersist(data []byte) {
-	if data == nil || len(data) < 1 { // bootstrap without any state?
-		return
-	}
+func (rf *Raft) readPersist() {
 	// Your code here (3C).
 	// Example:
 	// r := bytes.NewBuffer(data)
@@ -144,19 +145,25 @@ func (rf *Raft) readPersist(data []byte) {
 	//   rf.xxx = xxx
 	//  rf.yyy = yyy
 	// }
+	data := rf.persister.ReadRaftState()
+	if data == nil || len(data) < 1 {
+		return
+	}
 	r := bytes.NewBuffer(data)
 	d := labgob.NewDecoder(r)
 	var tmpCurrentTerm int
 	var tmpVotedFor int
 	var tmpLog []Log
-	if d.Decode(&tmpCurrentTerm) != nil || d.Decode(&tmpVotedFor) != nil || d.Decode(&tmpLog) != nil {
+	if d.Decode(&tmpCurrentTerm) != nil ||
+		d.Decode(&tmpVotedFor) != nil ||
+		d.Decode(&tmpLog) != nil {
 		log.Printf("readPersist failed for term %d: %v", rf.currentTerm, d)
 	} else {
 		rf.currentTerm = tmpCurrentTerm
 		rf.votedFor = tmpVotedFor
 		rf.log = tmpLog
 	}
-	rf.commitIndex = rf.log[0].Index
+	rf.snapshot = rf.persister.ReadSnapshot()
 }
 
 // the service says it has created a snapshot that has
@@ -166,13 +173,19 @@ func (rf *Raft) readPersist(data []byte) {
 func (rf *Raft) Snapshot(index int, snapshot []byte) {
 	// Your code here (3D).
 	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
+	if rf.commitIndex < index || index <= rf.log[0].Index {
+		DPrintf("[%d] %d 拒绝 snapshot 请求 index %d", rf.currentTerm, rf.me, index)
+		return
+	}
+
 	firstIndex := rf.log[0].Index
 	pos := index - firstIndex
 	rf.log[0].Index = index
 	rf.log[0].Term = rf.log[pos].Term
 	rf.log = append(rf.log[0:1], rf.log[pos+1:]...)
 	rf.snapshot = snapshot
-	rf.mu.Unlock()
 	rf.persist()
 	DPrintf("[%d] %d 将索引 %d 及之前的日志压缩为快照", rf.currentTerm, rf.me, index)
 }
@@ -275,7 +288,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs,
 		return
 	} else if args.PrevLogIndex != rf.log[0].Index && args.PrevLogIndex > rf.log[len(rf.log)-1].Index {
 		reply.XTerm = -1
-		reply.XIndex = rf.log[len(rf.log)-1].Index
+		reply.XIndex = rf.log[len(rf.log)-1].Index + 1
 		DPrintf("[%d] %d's logs are less than the leader %d's", rf.currentTerm, rf.me, args.LeaderId)
 		return
 	} else if args.PrevLogIndex != rf.log[0].Index && args.PrevLogTerm != rf.log[args.PrevLogIndex-rf.log[0].Index].Term {
@@ -609,6 +622,7 @@ func (rf *Raft) sendAppendEntries(peer int) {
 			}
 			if reply.Success {
 				rf.nextIndex[peer] = args.LastIncludedIndex + 1
+				rf.matchIndex[peer] = args.LastIncludedIndex
 			}
 		}
 	} else {
@@ -703,12 +717,21 @@ func (rf *Raft) applyCommited() {
 		}
 
 		//所有服务器重启后先应用日志快照到状态机
+		if rf.lastApplied < rf.log[0].Index {
+			rf.applyCh <- ApplyMsg{
+				CommandValid:  false,
+				SnapshotValid: true,
+				Snapshot:      rf.snapshot,
+				SnapshotTerm:  rf.log[0].Term,
+				SnapshotIndex: rf.log[0].Index,
+			}
+			rf.lastApplied = rf.log[0].Index
+		}
 
 		commitIndex := rf.commitIndex
 		firstIndex := rf.lastApplied + 1 - rf.log[0].Index
 		lastIndex := rf.commitIndex - rf.log[0].Index
 		logs := make([]Log, lastIndex-firstIndex+1)
-		DPrintf("哈哈哈哈哈哈哈哈%d %d", rf.lastApplied, rf.log[0].Index)
 		copy(logs, rf.log[firstIndex:lastIndex+1])
 		rf.mu.Unlock()
 		for _, msg := range logs {
@@ -757,7 +780,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.appendCond = make([]*sync.Cond, len(rf.peers))
 
 	// initialize from state persisted before a crash
-	rf.readPersist(persister.ReadRaftState())
+	rf.readPersist()
 	for i := 0; i < len(peers); i++ {
 		rf.nextIndex[i] = len(rf.log)
 		rf.matchIndex[i] = 0
