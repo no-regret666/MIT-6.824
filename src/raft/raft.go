@@ -223,6 +223,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// Your code here (3A, 3B).
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
+	defer rf.persist()
 	if args.Term < rf.currentTerm || (args.Term == rf.currentTerm && rf.votedFor != -1 && rf.votedFor != args.CandidateId) {
 		reply.Term = rf.currentTerm
 		reply.VoteGranted = false
@@ -234,19 +235,11 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		rf.currentTerm = args.Term
 		rf.votedFor = -1
 	}
-	term := 0
-	index := 0
-	if len(rf.log) > 1 {
-		term = rf.log[len(rf.log)-1].Term
-		index = rf.log[len(rf.log)-1].Index
-	} else {
-		term = rf.log[0].Term
-		index = rf.log[0].Index
-	}
+	term := rf.log[len(rf.log)-1].Term
+	index := rf.log[len(rf.log)-1].Index
 	if args.LastLogTerm < term || (args.LastLogTerm == term && args.LastLogIndex < index) {
 		reply.Term = rf.currentTerm
 		reply.VoteGranted = false
-		rf.persist()
 		DPrintf("[%d} %d的日志比%d的日志新，拒绝投票", rf.currentTerm, rf.me, args.CandidateId)
 		return
 	}
@@ -256,7 +249,6 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	reply.Term = rf.currentTerm
 	reply.VoteGranted = true
 	DPrintf("[%d] %d agree %d to become leader", rf.currentTerm, rf.me, rf.votedFor)
-	rf.persist()
 }
 
 type AppendEntriesArgs struct {
@@ -480,6 +472,7 @@ func (rf *Raft) resetTimeout() {
 	rf.time = time.Now()
 	ms := 300 + (rand.Int63() % 300)
 	rf.electionTimeout = time.Duration(ms) * time.Millisecond
+	DPrintf("[%d] %d reset timeout %v", rf.currentTerm, rf.me, rf.electionTimeout)
 }
 
 func (rf *Raft) startElection() {
@@ -490,14 +483,11 @@ func (rf *Raft) startElection() {
 	rf.persist()
 
 	voted := 1
-	args := RequestVoteArgs{}
-	args.Term = rf.currentTerm
-	args.CandidateId = rf.me
-	args.LastLogTerm = rf.log[0].Term
-	args.LastLogIndex = rf.log[0].Index
-	if len(rf.log) > 1 {
-		args.LastLogTerm = rf.log[len(rf.log)-1].Term
-		args.LastLogIndex = rf.log[len(rf.log)-1].Index
+	args := RequestVoteArgs{
+		Term:         rf.currentTerm,
+		CandidateId:  rf.me,
+		LastLogIndex: rf.log[len(rf.log)-1].Index,
+		LastLogTerm:  rf.log[len(rf.log)-1].Term,
 	}
 
 	for peer := range rf.peers {
@@ -510,26 +500,27 @@ func (rf *Raft) startElection() {
 				DPrintf("[%d] %d 向 %d 发送requestVote", rf.currentTerm, rf.me, peer)
 				rf.mu.Lock()
 				defer rf.mu.Unlock()
+				defer rf.persist()
 				if reply.VoteGranted {
-					if rf.currentTerm == args.Term && rf.state == "Candidate" {
-						voted++
-						if voted >= len(rf.peers)/2+1 {
-							DPrintf("[%d] %d get more than half votes,succeed to be leader", rf.currentTerm, rf.me)
-							for i := 0; i < len(rf.peers); i++ {
-								rf.nextIndex[i] = len(rf.log) + rf.log[0].Index
-								rf.matchIndex[i] = rf.log[0].Index
-							}
-							rf.state = "Leader"
-							go rf.BroadcastHeartBeat()
-							return
+					if rf.currentTerm != args.Term || rf.state != "Candidate" {
+						return
+					}
+					voted++
+					if voted >= len(rf.peers)/2+1 {
+						DPrintf("[%d] %d get more than half votes,succeed to be leader", rf.currentTerm, rf.me)
+						for i := 0; i < len(rf.peers); i++ {
+							rf.nextIndex[i] = len(rf.log) + rf.log[0].Index
+							rf.matchIndex[i] = rf.log[0].Index
 						}
+						rf.state = "Leader"
+						go rf.BroadcastHeartBeat()
+						return
 					}
 				} else if reply.Term > rf.currentTerm {
 					rf.state = "Follower"
 					rf.currentTerm = reply.Term
 					rf.votedFor = -1
 					DPrintf("[%d] %d fail to be leader", rf.currentTerm, rf.me)
-					rf.persist()
 					return
 				}
 			}
@@ -564,17 +555,25 @@ func (rf *Raft) updateCommitIndex() {
 
 func (rf *Raft) ticker() {
 	for rf.killed() == false {
-		rf.mu.Lock()
+		//if rf.judgeElectionTimeout() {
+		//	rf.mu.Lock()
+		//	if rf.state != "Leader" {
+		//		rf.startElection()
+		//	}
+		//	rf.resetTimeout()
+		//	rf.mu.Unlock()
+		//}
 		switch rf.state {
 		case "Follower":
 			fallthrough
 		case "Candidate":
 			if rf.judgeElectionTimeout() {
+				rf.mu.Lock()
 				rf.resetTimeout()
 				rf.startElection()
+				rf.mu.Unlock()
 			}
 		}
-		rf.mu.Unlock()
 		time.Sleep(200 * time.Millisecond)
 	}
 }
